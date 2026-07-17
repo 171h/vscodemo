@@ -29,6 +29,7 @@ export default {
           items: [
             { text: '记录索引', link: '/changelog/' },
             // 🔖 RELEASE-CHANGELOG-ITEMS — 由 scripts/release.sh 自动管理
+            { text: 'v0.0.1 (2026-07-17)', link: '/changelog/v0.0.1' },
             { text: 'v0.0.8 (2026-07-17)', link: '/changelog/v0.0.8' },
             { text: 'v0.0.7-vscodemo-1 (2026-07-16)', link: '/changelog/v0.0.7-vscodemo-1' },
           ]
