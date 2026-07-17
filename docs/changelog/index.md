@@ -1,0 +1,20 @@
+# 发布记录
+
+`scripts/release.sh` 会为每个发布 tag 自动生成一页 changelog，并把记录追加到下表。
+
+## 记录索引
+
+| 日期 | VS Code | VSCodium release | 冲突补丁数 | 记录 |
+| --- | --- | --- | --- | --- |
+| 2026-07-16 | 1.126.0 | 1.126.04524 | — | [v0.0.7-vscodemo-1](./v0.0.7-vscodemo-1.md) |
+| 2026-07-17 | 1.126.0 | 1.126.04524 | — | [v0.0.7-vscodemo-1](./v0.0.7-vscodemo-1.md) |
+| 2026-07-17 | 1.126.0 | 1.126.04524 | — | [v0.0.8](./v0.0.8.md) |
+
+发布时在 Git Bash 中运行：
+
+```bash
+bash scripts/release.sh
+```
+
+脚本会生成 changelog、提交文档、创建 tag，并在确认后推送分支与 tag。tag 推送后由
+`.github/workflows/release-vscode.yml` 构建 VSCodemo 并发布产物。

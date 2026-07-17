@@ -1,0 +1,36 @@
+# 依赖
+node_modules/
+
+# 上游 VS Code 源码检出（工作副本，不入库，由 scripts/init.sh 生成）
+/vscode/
+
+# 构建产物
+/out/
+/dist/
+/assets/
+/build-output/
+/build/.dev-prepare-state.json
+
+#local
+.zcode
+
+# VitePress
+docs/.vitepress/dist/
+docs/.vitepress/cache/
+
+# OMC / 工具状态
+.omc/
+
+# 日志与临时文件
+*.log
+.DS_Store
+Thumbs.db
+
+# GitHub Actions local verification secrets/env
+.secrets
+.secrets.*
+.env.act
+.env.act.*
+
+# GitHub Actions local runner binary
+/bin/

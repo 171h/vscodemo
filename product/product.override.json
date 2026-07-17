@@ -1,0 +1,39 @@
+{
+  "$comment": "在 VSCodium stable 基线上仅覆盖 VSCodemo 品牌与独立安装身份；功能差异仅由 Ribbon 补丁提供。",
+  "nameShort": "VSCodemo",
+  "nameLong": "VSCodemo",
+  "companyName": "VSCodemo",
+  "copyright": "Copyright (C) 2026 VSCodemo contributors",
+  "applicationName": "vscodemo",
+  "dataFolderName": ".vscodemo",
+  "sharedDataFolderName": ".vscodemo-shared",
+  "linuxIconName": "vscodemo",
+  "serverApplicationName": "vscodemo-server",
+  "serverDataFolderName": ".vscodemo-server",
+  "tunnelApplicationName": "vscodemo-tunnel",
+  "darwinBundleIdentifier": "com.171h.vscodemo",
+  "win32MutexName": "vscodemo",
+  "win32TunnelServiceMutex": "vscodemo-tunnelservice",
+  "win32TunnelMutex": "vscodemo-tunnel",
+  "win32DirName": "VSCodemo",
+  "win32NameVersion": "VSCodemo",
+  "win32RegValueName": "VSCodemo",
+  "win32AppUserModelId": "171h.VSCodemo",
+  "win32AppId": "{{FAE2E079-71C5-4405-B6BB-E32AA2766A59}",
+  "win32x64AppId": "{{5A794753-A4CA-47A4-B5C0-9999E5174E7B}",
+  "win32arm64AppId": "{{01A6858D-0E36-4767-930E-39741DA0494B}",
+  "win32UserAppId": "{{FC99A9B8-D899-4A9A-8FF5-A6B7769438F8}",
+  "win32x64UserAppId": "{{456803A2-A817-49CE-A429-162747729A67}",
+  "win32arm64UserAppId": "{{C9508A66-7194-4649-B252-8861CA2F3686}",
+  "win32ContextMenu": {
+    "x64": {
+      "clsid": "E2DB9CE1-27A7-4AF3-B64D-1A7462835FDB"
+    },
+    "arm64": {
+      "clsid": "AF0B6461-F613-4537-8B38-F63A0A026E60"
+    }
+  },
+  "win32MsiUpgradeCode": "1FDBBA52-C66E-4776-9A77-785D41CE5E47",
+  "win32ShellNameShort": "VSCodemo",
+  "urlProtocol": "vscodemo"
+}

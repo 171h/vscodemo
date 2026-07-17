@@ -1,0 +1,13 @@
+{
+  "$comment": "上游版本锁定文件。所有脚本从这里读取版本，升级时只改这一个文件（通过 scripts/upgrade.sh）。",
+  "vscode": {
+    "tag": "1.126.0",
+    "commit": "7e7950df89d055b5a378379db9ee14290772148a",
+    "repo": "https://github.com/microsoft/vscode.git"
+  },
+  "vscodium": {
+    "release": "1.126.04524",
+    "commit": "4015f2d0191311733aa5dbb2abde8101dce63eef",
+    "repo": "https://github.com/VSCodium/vscodium.git"
+  }
+}

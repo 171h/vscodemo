@@ -1,0 +1,22 @@
+意图: 让 Electron 可执行文件的 CompanyName 与 LegalCopyright 从 product.json
+读取，避免发行构建在 VSCodium 后处理后仍残留 VSCodium 版本资源文案。
+
+机制: 产品字段有值时使用品牌配置；普通 Code - OSS 未配置时保持上游回退值。
+VSCodium prepare_vscode.sh 会在用户补丁应用后改写回退文本，但 VSCodemo 的
+product.companyName / product.copyright 仍优先。
+
+Baseline: vscode 1.126.0，已先应用 100-build-darwin-app-name.patch。
+
+diff --git a/build/lib/electron.ts b/build/lib/electron.ts
+--- a/build/lib/electron.ts
++++ b/build/lib/electron.ts
+@@ -107,7 +107,7 @@ export const config = {
+ 	version: electronVersion,
+ 	tag: product.electronRepository ? `v${electronVersion}-${msBuildId}` : undefined,
+ 	productAppName: product.nameShort,
+-	companyName: 'Microsoft Corporation',
+-	copyright: 'Copyright (C) 2026 Microsoft. All rights reserved',
++	companyName: product.companyName ?? 'Microsoft Corporation',
++	copyright: product.copyright ?? 'Copyright (C) 2026 Microsoft. All rights reserved',
+ 	darwinExecutable: product.nameShort,
+ 	darwinIcon: 'resources/darwin/code.icns',

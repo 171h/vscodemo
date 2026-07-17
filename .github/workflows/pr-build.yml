@@ -1,0 +1,291 @@
+name: PR Build
+
+on:
+  issue_comment:
+    types: [created]
+
+# issue_comment 只负责唤起默认分支中的可信 workflow。magic-ci-bot installation
+# token 负责鉴权；私有子模块使用现有只读 checkout token。
+permissions:
+  contents: read
+
+env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+  APP_NAME: VSCodemo
+  BINARY_NAME: vscodemo
+  ORG_NAME: 171h
+  ASSETS_REPOSITORY: ${{ github.repository }}
+  GH_REPO_PATH: ${{ github.repository }}
+  VSCODE_QUALITY: stable
+  VSCODE_ARCH: x64
+  SHOULD_BUILD_REH: "yes"
+  SHOULD_BUILD_REH_WEB: "yes"
+  SHOULD_BUILD_CLI: "yes"
+  SHOULD_BUILD_DMG: "yes"
+  VSCODEMO_BUILD_UNSIGNED_DMG: "yes"
+
+jobs:
+  authorize:
+    name: Authorize @magic-ci-bot build
+    if: >-
+      ${{
+        github.event.issue.pull_request &&
+        github.event.comment.body == '@magic-ci-bot build' &&
+        contains(
+          fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
+          github.event.comment.author_association
+        )
+      }}
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    outputs:
+      pr_number: ${{ steps.authorize.outputs.pr_number }}
+      pr_sha: ${{ steps.authorize.outputs.pr_sha }}
+      check_run_id: ${{ steps.register-check.outputs.check_run_id }}
+
+    steps:
+      - name: Generate control token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.MAGIC_CI_APP_CLIENT_ID }}
+          private-key: ${{ secrets.MAGIC_CI_APP_PRIVATE_KEY }}
+          permission-metadata: read
+          permission-pull-requests: read
+
+      - name: Validate command and PR
+        id: authorize
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v9.0.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const { owner, repo } = context.repo;
+            const pullNumber = context.payload.issue.number;
+            const actor = context.payload.comment.user.login;
+
+            const { data: access } = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner,
+              repo,
+              username: actor,
+            });
+            if (!['admin', 'write'].includes(access.permission)) {
+              core.setFailed(`@${actor} needs write access to start a full build`);
+              return;
+            }
+
+            const { data: pr } = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: pullNumber,
+            });
+            if (pr.state !== 'open') {
+              core.setFailed(`PR #${pullNumber} is not open`);
+              return;
+            }
+            if (pr.head.repo?.full_name !== `${owner}/${repo}`) {
+              core.setFailed(`Fork PR builds are disabled: ${pr.head.repo?.full_name}`);
+              return;
+            }
+
+            core.setOutput('pr_number', String(pullNumber));
+            core.setOutput('pr_sha', pr.head.sha);
+
+      # issue_comment workflow 本身绑定默认分支 SHA。额外在 PR head SHA 上注册
+      # magic-ci-bot Check Run，才能让构建状态出现在 PR 与 commit 页面。
+      # Checks 权限尚未批准时安全跳过，不影响原有构建。
+      - name: Generate check token
+        id: check-token
+        continue-on-error: true
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.MAGIC_CI_APP_CLIENT_ID }}
+          private-key: ${{ secrets.MAGIC_CI_APP_PRIVATE_KEY }}
+          permission-checks: write
+          permission-metadata: read
+
+      - name: Register PR check
+        id: register-check
+        if: steps.check-token.outcome == 'success'
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v9.0.0
+        env:
+          PR_NUMBER: ${{ steps.authorize.outputs.pr_number }}
+          PR_SHA: ${{ steps.authorize.outputs.pr_sha }}
+        with:
+          github-token: ${{ steps.check-token.outputs.token }}
+          script: |
+            const { owner, repo } = context.repo;
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const { data: check } = await github.rest.checks.create({
+              owner,
+              repo,
+              name: 'VSCodemo PR Build / Windows x64',
+              head_sha: process.env.PR_SHA,
+              status: 'in_progress',
+              started_at: new Date().toISOString(),
+              details_url: runUrl,
+              external_id: `pr-build-${context.runId}`,
+              output: {
+                title: `Building PR #${process.env.PR_NUMBER}`,
+                summary: `Triggered by @${context.actor}. [Open the GitHub Actions run](${runUrl}).`,
+              },
+            });
+            core.setOutput('check_run_id', String(check.id));
+
+  build:
+    name: Build PR #${{ needs.authorize.outputs.pr_number }} / Windows x64
+    needs: authorize
+    runs-on: windows-2022
+    timeout-minutes: 720
+    permissions:
+      contents: read
+    concurrency:
+      group: pr-build-${{ needs.authorize.outputs.pr_number }}
+      cancel-in-progress: false
+    defaults:
+      run:
+        shell: bash
+    env:
+      OS_NAME: windows
+
+    steps:
+      - name: Checkout PR source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.authorize.outputs.pr_sha }}
+          submodules: recursive
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve PR build metadata
+        env:
+          PR_NUMBER: ${{ needs.authorize.outputs.pr_number }}
+          PR_SHA: ${{ needs.authorize.outputs.pr_sha }}
+        run: |
+          set -euo pipefail
+          [[ "${PR_NUMBER}" =~ ^[0-9]+$ ]] || {
+            echo "Invalid PR number: ${PR_NUMBER}" >&2
+            exit 1
+          }
+          [[ "${PR_SHA}" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "Invalid PR SHA: ${PR_SHA}" >&2
+            exit 1
+          }
+
+          VSCODEMO_BUILD_COMMIT="$(git rev-parse HEAD)"
+          if [[ "${VSCODEMO_BUILD_COMMIT}" != "${PR_SHA}" ]]; then
+            echo "Checked out ${VSCODEMO_BUILD_COMMIT}, expected ${PR_SHA}" >&2
+            exit 1
+          fi
+
+          VSCODEMO_BUILD_DATE="$(git log -1 --format=%cI HEAD)"
+          RELEASE_VERSION="$(node -p "require('./upstream.lock.json').vscodium.release")"
+          RELEASE_TAG="pr-${PR_NUMBER}-${PR_SHA:0:7}"
+          {
+            echo "RELEASE_TAG=${RELEASE_TAG}"
+            echo "RELEASE_VERSION=${RELEASE_VERSION}"
+            echo "VSCODEMO_RELEASE_TAG=${RELEASE_TAG}"
+            echo "VSCODEMO_RELEASE_VERSION=${RELEASE_VERSION}"
+            echo "VSCODEMO_BUILD_COMMIT=${VSCODEMO_BUILD_COMMIT}"
+            echo "VSCODEMO_BUILD_DATE=${VSCODEMO_BUILD_DATE}"
+            echo "BUILD_SOURCEVERSION=${VSCODEMO_BUILD_COMMIT}"
+            echo "BUILD_SOURCEVERSION_DATE=${VSCODEMO_BUILD_DATE}"
+          } >> "${GITHUB_ENV}"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: vscodium/.nvmrc
+
+      - name: Enable pnpm
+        run: |
+          set -euo pipefail
+          if command -v corepack >/dev/null 2>&1; then
+            if ! { corepack enable && corepack prepare pnpm@11.1.3 --activate; }; then
+              npm install --global pnpm@11.1.3
+            fi
+          elif ! command -v pnpm >/dev/null 2>&1; then
+            npm install --global pnpm@11.1.3
+          fi
+          pnpm --version
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Install Windows packaging dependencies
+        shell: pwsh
+        run: |
+          choco install wixtoolset --no-progress -y
+          $wix = Get-ChildItem "${env:ProgramFiles(x86)}" -Directory -Filter "WiX Toolset*" |
+            Sort-Object Name -Descending |
+            Select-Object -First 1
+          if (-not $wix) {
+            throw "WiX Toolset install directory not found"
+          }
+          Add-Content -Path $env:GITHUB_ENV -Value "WIX=$($wix.FullName)\"
+
+      - name: Verify VSCodemo asset generation
+        env:
+          # @vscode/ripgrep 等 postinstall 走 GitHub API 下载，避免匿名请求被限流。
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/build.sh --assets
+
+  report:
+    name: Report PR check
+    needs: [authorize, build]
+    if: >-
+      ${{
+        always() &&
+        needs.authorize.outputs.check_run_id != ''
+      }}
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+
+    steps:
+      - name: Generate check token
+        id: check-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.MAGIC_CI_APP_CLIENT_ID }}
+          private-key: ${{ secrets.MAGIC_CI_APP_PRIVATE_KEY }}
+          permission-checks: write
+          permission-metadata: read
+
+      - name: Complete PR check
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v9.0.0
+        env:
+          BUILD_RESULT: ${{ needs.build.result }}
+          CHECK_RUN_ID: ${{ needs.authorize.outputs.check_run_id }}
+          PR_NUMBER: ${{ needs.authorize.outputs.pr_number }}
+          PR_SHA: ${{ needs.authorize.outputs.pr_sha }}
+        with:
+          github-token: ${{ steps.check-token.outputs.token }}
+          script: |
+            const { owner, repo } = context.repo;
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const conclusions = {
+              success: 'success',
+              failure: 'failure',
+              cancelled: 'cancelled',
+              skipped: 'neutral',
+            };
+            const conclusion = conclusions[process.env.BUILD_RESULT] ?? 'failure';
+            await github.rest.checks.update({
+              owner,
+              repo,
+              check_run_id: Number(process.env.CHECK_RUN_ID),
+              status: 'completed',
+              conclusion,
+              completed_at: new Date().toISOString(),
+              details_url: runUrl,
+              output: {
+                title: `PR #${process.env.PR_NUMBER} build ${process.env.BUILD_RESULT}`,
+                summary: `Built commit \`${process.env.PR_SHA}\`. [Open the GitHub Actions run](${runUrl}).`,
+              },
+            });

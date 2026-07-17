@@ -1,0 +1,20 @@
+macOS 的 .app 包名取自 gulp 打包配置 productAppName（默认 = product.nameLong）。
+本项目 nameLong 是含中文与空格的品牌名（"Magic Studio - 建筑计算平台"），而
+VSCodium 构建链（build_cli.sh、prepare_assets.sh）假定包名为 ${nameShort}.app，
+导致 macOS CLI 二进制拷贝与产物打包找不到目录而失败。
+
+将 productAppName 改为 nameShort，使包名固定为 VSCodemo.app（与 APP_NAME
+一致）；nameLong 仍用于 About 对话框等 UI 展示，品牌文案不受影响。
+
+diff --git a/build/lib/electron.ts b/build/lib/electron.ts
+--- a/build/lib/electron.ts
++++ b/build/lib/electron.ts
+@@ -106,7 +106,7 @@ const { electronVersion, msBuildId } = util.getElectronVersion();
+ export const config = {
+ 	version: electronVersion,
+ 	tag: product.electronRepository ? `v${electronVersion}-${msBuildId}` : undefined,
+-	productAppName: product.nameLong,
++	productAppName: product.nameShort,
+ 	companyName: 'Microsoft Corporation',
+ 	copyright: 'Copyright (C) 2026 Microsoft. All rights reserved',
+ 	darwinExecutable: product.nameShort,

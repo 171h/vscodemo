@@ -1,0 +1,110 @@
+name: vscodemo
+adopt-info: vscodemo
+summary: Building calculation platform
+description: |
+  VSCodemo is a VSCodium-based development host with Ribbon support.
+
+base: core20
+grade: stable
+confinement: classic
+compression: lzo
+
+parts:
+  vscodemo:
+    plugin: nil
+    override-build: |
+      set -eu
+
+      DEB_PATH="$(find "${SNAPCRAFT_PROJECT_DIR}/input" -maxdepth 1 -name 'vscodemo_*_amd64.deb' | sort | tail -n 1)"
+      if [ -z "${DEB_PATH}" ]; then
+        echo "No VSCodemo amd64 deb found in ${SNAPCRAFT_PROJECT_DIR}/input" >&2
+        exit 1
+      fi
+
+      VERSION="${RELEASE_VERSION:-$(basename "${DEB_PATH}" | sed -E 's/^vscodemo_([^_]+)_amd64\.deb$/\1/')}"
+      dpkg -x "${DEB_PATH}" "${SNAPCRAFT_PART_INSTALL}"
+      snapcraftctl set-version "${VERSION}"
+
+      mkdir -p "${SNAPCRAFT_PART_INSTALL}/meta/gui"
+      ICON_SRC="${SNAPCRAFT_PART_INSTALL}/usr/share/vscodemo/resources/app/resources/linux/code.png"
+      if [ -f "${ICON_SRC}" ]; then
+        cp "${ICON_SRC}" "${SNAPCRAFT_PART_INSTALL}/meta/gui/vscodemo.png"
+      fi
+
+      DESKTOP_FILE="${SNAPCRAFT_PART_INSTALL}/usr/share/applications/vscodemo.desktop"
+      URL_DESKTOP_FILE="${SNAPCRAFT_PART_INSTALL}/usr/share/applications/vscodemo-url-handler.desktop"
+
+      if [ -f "${DESKTOP_FILE}" ]; then
+        sed -i 's|Exec=/usr/share/vscodemo/vscodemo|Exec=vscodemo --force-user-env|g' "${DESKTOP_FILE}"
+        sed -i 's|^Icon=.*|Icon=${SNAP}/meta/gui/vscodemo.png|g' "${DESKTOP_FILE}"
+      fi
+
+      if [ -f "${URL_DESKTOP_FILE}" ]; then
+        sed -i 's|Exec=/usr/share/vscodemo/vscodemo|Exec=vscodemo --force-user-env|g' "${URL_DESKTOP_FILE}"
+        sed -i 's|^Icon=.*|Icon=${SNAP}/meta/gui/vscodemo.png|g' "${URL_DESKTOP_FILE}"
+      fi
+    build-packages:
+      - dpkg
+    stage-packages:
+      - ca-certificates
+      - libasound2
+      - libatk-bridge2.0-0
+      - libatk1.0-0
+      - libatspi2.0-0
+      - libcairo2
+      - libcanberra-gtk3-module
+      - libcurl3-gnutls
+      - libcurl3-nss
+      - libcurl4
+      - libdrm2
+      - libgbm1
+      - libgl1
+      - libglib2.0-0
+      - libgtk-3-0
+      - libibus-1.0-5
+      - libnss3
+      - libpango-1.0-0
+      - libsecret-1-0
+      - libwayland-egl1
+      - libxcomposite1
+      - libxdamage1
+      - libxfixes3
+      - libxkbcommon0
+      - libxkbfile1
+      - libxrandr2
+      - libxss1
+      - locales-all
+      - packagekit-gtk3-module
+      - xdg-utils
+    prime:
+      - -usr/share/doc
+      - -usr/share/fonts
+      - -usr/share/icons
+      - -usr/share/lintian
+      - -usr/share/man
+      - -usr/share/vscodemo/chrome-sandbox
+    build-attributes:
+      - enable-patchelf
+    override-prime: |
+      set -eu
+      snapcraftctl prime
+      for snap in "core20"; do
+        cd "/snap/${snap}/current/usr/lib/${SNAPCRAFT_ARCH_TRIPLET}"
+        find . -type f,l -name "*.so*" -exec sh -c 'rm -f "${SNAPCRAFT_PRIME}/$1"*' sh {} \;
+      done
+
+  electron-launch:
+    after:
+      - vscodemo
+    plugin: dump
+    source: snap/local/bin
+
+apps:
+  vscodemo:
+    command: electron-launch $SNAP/usr/share/vscodemo/bin/vscodemo --no-sandbox
+    desktop: usr/share/applications/vscodemo.desktop
+    common-id: vscodemo.desktop
+
+  url-handler:
+    command: electron-launch $SNAP/usr/share/vscodemo/bin/vscodemo --open-url --no-sandbox
+    desktop: usr/share/applications/vscodemo-url-handler.desktop

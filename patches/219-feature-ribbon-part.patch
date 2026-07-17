@@ -1,0 +1,1416 @@
+Ribbon Part 补丁：在 Banner 之后增加横跨 Workbench 的可折叠功能区，提供 File/View/Help 内置标签和扩展声明式 contributes.ribbon 标签、分组、命令按钮。
+保留现有 ActivityBar 入口；Ribbon 支持状态记忆、键盘导航、折叠后的临时覆盖层和启动 Splash 尺寸恢复。
+
+diff --git a/src/vs/code/electron-browser/workbench/workbench.ts b/src/vs/code/electron-browser/workbench/workbench.ts
+index 767fbe08db3c00b0d3da3e5c46843e87702b3ed6..bdc2f1954ce3cf5de71e97d553de40c289bf455f 100644
+--- a/src/vs/code/electron-browser/workbench/workbench.ts
++++ b/src/vs/code/electron-browser/workbench/workbench.ts
+@@ -90,6 +90,8 @@
+ 		// restore parts if possible (we might not always store layout info)
+ 		if (data?.layoutInfo) {
+ 			const { layoutInfo, colorInfo } = data;
++			const ribbonHeight = layoutInfo.ribbonHeight ?? 0;
++			const topOffset = layoutInfo.titleBarHeight + ribbonHeight;
+ 
+ 			const splash = document.createElement('div');
+ 			splash.id = 'monaco-parts-splash';
+@@ -145,13 +147,25 @@
+ 				}
+ 			}
+ 
++			// part: ribbon
++			if (ribbonHeight > 0) {
++				const ribbonDiv = document.createElement('div');
++				ribbonDiv.style.position = 'absolute';
++				ribbonDiv.style.width = '100%';
++				ribbonDiv.style.height = `${ribbonHeight}px`;
++				ribbonDiv.style.left = '0';
++				ribbonDiv.style.top = `${layoutInfo.titleBarHeight}px`;
++				ribbonDiv.style.backgroundColor = `${colorInfo.editorBackground}`;
++				splash.appendChild(ribbonDiv);
++			}
++
+ 			// part: activity bar
+ 			if (layoutInfo.activityBarWidth > 0) {
+ 				const activityDiv = document.createElement('div');
+ 				activityDiv.style.position = 'absolute';
+ 				activityDiv.style.width = `${layoutInfo.activityBarWidth}px`;
+-				activityDiv.style.height = `calc(100% - ${layoutInfo.titleBarHeight + layoutInfo.statusBarHeight}px)`;
+-				activityDiv.style.top = `${layoutInfo.titleBarHeight}px`;
++				activityDiv.style.height = `calc(100% - ${topOffset + layoutInfo.statusBarHeight}px)`;
++				activityDiv.style.top = `${topOffset}px`;
+ 				if (layoutInfo.sideBarSide === 'left') {
+ 					activityDiv.style.left = '0';
+ 				} else {
+@@ -182,8 +196,8 @@
+ 				const sideDiv = document.createElement('div');
+ 				sideDiv.style.position = 'absolute';
+ 				sideDiv.style.width = `${layoutInfo.sideBarWidth}px`;
+-				sideDiv.style.height = `calc(100% - ${layoutInfo.titleBarHeight + layoutInfo.statusBarHeight}px)`;
+-				sideDiv.style.top = `${layoutInfo.titleBarHeight}px`;
++				sideDiv.style.height = `calc(100% - ${topOffset + layoutInfo.statusBarHeight}px)`;
++				sideDiv.style.top = `${topOffset}px`;
+ 				if (layoutInfo.sideBarSide === 'left') {
+ 					sideDiv.style.left = `${layoutInfo.activityBarWidth}px`;
+ 				} else {
+@@ -214,8 +228,8 @@
+ 				const auxSideDiv = document.createElement('div');
+ 				auxSideDiv.style.position = 'absolute';
+ 				auxSideDiv.style.width = `${layoutInfo.auxiliaryBarWidth}px`;
+-				auxSideDiv.style.height = `calc(100% - ${layoutInfo.titleBarHeight + layoutInfo.statusBarHeight}px)`;
+-				auxSideDiv.style.top = `${layoutInfo.titleBarHeight}px`;
++				auxSideDiv.style.height = `calc(100% - ${topOffset + layoutInfo.statusBarHeight}px)`;
++				auxSideDiv.style.top = `${topOffset}px`;
+ 				if (layoutInfo.sideBarSide === 'left') {
+ 					auxSideDiv.style.right = '0';
+ 				} else {
+diff --git a/src/vs/platform/theme/common/themeService.ts b/src/vs/platform/theme/common/themeService.ts
+index 33fbf67cde3c073ffc5d9bebbaf50357b211da4a..ab4adce2408205afb5df9b49af5bcaa6bdfd31d9 100644
+--- a/src/vs/platform/theme/common/themeService.ts
++++ b/src/vs/platform/theme/common/themeService.ts
+@@ -240,6 +240,7 @@ export interface IPartsSplash {
+ 		sideBarSide: string;
+ 		editorPartMinWidth: number;
+ 		titleBarHeight: number;
++		ribbonHeight: number;
+ 		activityBarWidth: number;
+ 		sideBarWidth: number;
+ 		auxiliaryBarWidth: number;
+diff --git a/src/vs/workbench/browser/actions/navigationActions.ts b/src/vs/workbench/browser/actions/navigationActions.ts
+index 08713b71755fc0d443bf201fb7c660e3d31bc821..34835d9e172c605780b50516c1754035b5f2b472 100644
+--- a/src/vs/workbench/browser/actions/navigationActions.ts
++++ b/src/vs/workbench/browser/actions/navigationActions.ts
+@@ -270,7 +270,7 @@ abstract class BaseFocusAction extends Action2 {
+ 		} else {
+ 			switch (part) {
+ 				case Parts.EDITOR_PART:
+-					neighbour = next ? Parts.PANEL_PART : Parts.SIDEBAR_PART;
++					neighbour = next ? Parts.PANEL_PART : Parts.RIBBON_PART;
+ 					break;
+ 				case Parts.PANEL_PART:
+ 					neighbour = next ? Parts.AUXILIARYBAR_PART : Parts.EDITOR_PART;
+@@ -285,7 +285,10 @@ abstract class BaseFocusAction extends Action2 {
+ 					neighbour = next ? Parts.SIDEBAR_PART : Parts.STATUSBAR_PART;
+ 					break;
+ 				case Parts.SIDEBAR_PART:
+-					neighbour = next ? Parts.EDITOR_PART : Parts.ACTIVITYBAR_PART;
++					neighbour = next ? Parts.RIBBON_PART : Parts.ACTIVITYBAR_PART;
++					break;
++				case Parts.RIBBON_PART:
++					neighbour = next ? Parts.EDITOR_PART : Parts.SIDEBAR_PART;
+ 					break;
+ 				default:
+ 					neighbour = Parts.EDITOR_PART;
+@@ -313,6 +316,8 @@ abstract class BaseFocusAction extends Action2 {
+ 			currentlyFocusedPart = Parts.AUXILIARYBAR_PART;
+ 		} else if (layoutService.hasFocus(Parts.PANEL_PART)) {
+ 			currentlyFocusedPart = Parts.PANEL_PART;
++		} else if (layoutService.hasFocus(Parts.RIBBON_PART)) {
++			currentlyFocusedPart = Parts.RIBBON_PART;
+ 		}
+ 
+ 		layoutService.focusPart(currentlyFocusedPart ? this.findVisibleNeighbour(layoutService, currentlyFocusedPart, next) : Parts.EDITOR_PART, getActiveWindow());
+diff --git a/src/vs/workbench/browser/layout.ts b/src/vs/workbench/browser/layout.ts
+index 3480283a2177b0833bc5a497c746aa311b79a6f8..b02fbc4e7a82f2216d47392dd8bc1b57d7a2ac44 100644
+--- a/src/vs/workbench/browser/layout.ts
++++ b/src/vs/workbench/browser/layout.ts
+@@ -47,6 +47,7 @@ import { AuxiliaryBarPart } from './parts/auxiliarybar/auxiliaryBarPart.js';
+ import { ITelemetryService } from '../../platform/telemetry/common/telemetry.js';
+ import { IAuxiliaryWindowService } from '../services/auxiliaryWindow/browser/auxiliaryWindowService.js';
+ import { CodeWindow, mainWindow } from '../../base/browser/window.js';
++import { IRibbonService } from './parts/ribbon/ribbonService.js';
+ 
+ //#region Layout Implementation
+ 
+@@ -249,6 +250,11 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
+ 			quickPickTop = top;
+ 		}
+ 
++		if (targetWindow === mainWindow) {
++			top += this.getPart(Parts.RIBBON_PART).maximumHeight;
++			quickPickTop = top;
++		}
++
+ 		const isCommandCenterVisible = titlebarVisible && this.configurationService.getValue<boolean>(LayoutSettings.COMMAND_CENTER) !== false;
+ 		if (isCommandCenterVisible) {
+ 			// If the command center is visible then the quickinput
+@@ -268,6 +274,7 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
+ 
+ 	private titleBarPartView!: ISerializableView;
+ 	private bannerPartView!: ISerializableView;
++	private ribbonPartView!: ISerializableView;
+ 	private activityBarPartView!: ISerializableView;
+ 	private sideBarPartView!: ISerializableView;
+ 	private panelPartView!: ISerializableView;
+@@ -290,6 +297,7 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
+ 	private notificationService!: INotificationService;
+ 	private themeService!: IThemeService;
+ 	private statusBarService!: IStatusbarService;
++	private ribbonService!: IRibbonService;
+ 	private logService!: ILogService;
+ 	private telemetryService!: ITelemetryService;
+ 	private auxiliaryWindowService!: IAuxiliaryWindowService;
+@@ -330,6 +338,7 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
+ 		this.notificationService = accessor.get(INotificationService);
+ 		this.statusBarService = accessor.get(IStatusbarService);
+ 		accessor.get(IBannerService);
++		this.ribbonService = accessor.get(IRibbonService);
+ 
+ 		// Listeners
+ 		this.registerLayoutListeners();
+@@ -1284,6 +1293,9 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
+ 			case Parts.STATUSBAR_PART:
+ 				this.statusBarService.getPart(container).focus();
+ 				break;
++			case Parts.RIBBON_PART:
++				this.ribbonService.focus();
++				break;
+ 			default: {
+ 				container?.focus();
+ 			}
+@@ -1345,6 +1357,8 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
+ 				return !this.stateModel.getRuntimeValue(LayoutStateKeys.EDITOR_HIDDEN);
+ 			case Parts.BANNER_PART:
+ 				return this.initialized ? this.workbenchGrid.isViewVisible(this.bannerPartView) : false;
++			case Parts.RIBBON_PART:
++				return true;
+ 			default:
+ 				return false; // any other part cannot be hidden
+ 		}
+@@ -1387,6 +1401,7 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
+ 
+ 			const takenHeight =
+ 				(this.isVisible(Parts.TITLEBAR_PART, targetWindow) ? this.titleBarPartView.minimumHeight : 0) +
++				this.ribbonPartView.minimumHeight +
+ 				(this.isVisible(Parts.STATUSBAR_PART, targetWindow) ? this.statusBarPartView.minimumHeight : 0) +
+ 				(this.isVisible(Parts.PANEL_PART) && isPanelHorizontal ? this.panelPartView.minimumHeight : 0);
+ 
+@@ -1603,6 +1618,7 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
+ 	protected createWorkbenchLayout(): void {
+ 		const titleBar = this.getPart(Parts.TITLEBAR_PART);
+ 		const bannerPart = this.getPart(Parts.BANNER_PART);
++		const ribbonPart = this.getPart(Parts.RIBBON_PART);
+ 		const editorPart = this.getPart(Parts.EDITOR_PART);
+ 		const activityBar = this.getPart(Parts.ACTIVITYBAR_PART);
+ 		const panelPart = this.getPart(Parts.PANEL_PART);
+@@ -1613,6 +1629,7 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
+ 		// View references for all parts
+ 		this.titleBarPartView = titleBar;
+ 		this.bannerPartView = bannerPart;
++		this.ribbonPartView = ribbonPart;
+ 		this.sideBarPartView = sideBar;
+ 		this.activityBarPartView = activityBar;
+ 		this.editorPartView = editorPart;
+@@ -1623,6 +1640,7 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
+ 		const viewMap: Record<string, ISerializableView> = {
+ 			[Parts.ACTIVITYBAR_PART]: this.activityBarPartView,
+ 			[Parts.BANNER_PART]: this.bannerPartView,
++			[Parts.RIBBON_PART]: this.ribbonPartView,
+ 			[Parts.TITLEBAR_PART]: this.titleBarPartView,
+ 			[Parts.EDITOR_PART]: this.editorPartView,
+ 			[Parts.PANEL_PART]: this.panelPartView,
+@@ -1643,7 +1661,7 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
+ 		this.workbenchGrid = workbenchGrid;
+ 		this.workbenchGrid.edgeSnapping = this.state.runtime.mainWindowFullscreen;
+ 
+-		for (const part of [titleBar, editorPart, activityBar, panelPart, sideBar, statusBar, auxiliaryBarPart, bannerPart]) {
++		for (const part of [titleBar, editorPart, activityBar, panelPart, sideBar, statusBar, auxiliaryBarPart, bannerPart, ribbonPart]) {
+ 			this._register(part.onDidVisibilityChange(visible => {
+ 				if (!this.inMaximizedAuxiliaryBarTransition) {
+ 
+@@ -2452,7 +2470,7 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
+ 
+ 		for (const neighborView of neighborViews) {
+ 			const neighborPart =
+-				[Parts.ACTIVITYBAR_PART, Parts.EDITOR_PART, Parts.PANEL_PART, Parts.AUXILIARYBAR_PART, Parts.SIDEBAR_PART, Parts.STATUSBAR_PART, Parts.TITLEBAR_PART]
++				[Parts.ACTIVITYBAR_PART, Parts.EDITOR_PART, Parts.PANEL_PART, Parts.AUXILIARYBAR_PART, Parts.SIDEBAR_PART, Parts.STATUSBAR_PART, Parts.TITLEBAR_PART, Parts.RIBBON_PART]
+ 					.find(partId => this.getPart(partId) === neighborView && this.isVisible(partId, mainWindow));
+ 
+ 			if (neighborPart !== undefined) {
+@@ -2593,9 +2611,10 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
+ 
+ 		const titleBarHeight = this.titleBarPartView.minimumHeight;
+ 		const bannerHeight = this.bannerPartView.minimumHeight;
++		const ribbonHeight = this.ribbonPartView.minimumHeight;
+ 		const statusBarHeight = this.statusBarPartView.minimumHeight;
+ 		const activityBarWidth = this.activityBarPartView.minimumWidth;
+-		const middleSectionHeight = height - titleBarHeight - statusBarHeight;
++		const middleSectionHeight = height - titleBarHeight - ribbonHeight - statusBarHeight;
+ 
+ 		const titleAndBanner: ISerializedNode[] = [
+ 			{
+@@ -2661,6 +2680,12 @@ export abstract class Layout extends Disposable implements IWorkbenchLayoutServi
+ 				size: width,
+ 				data: [
+ 					...(this.shouldShowBannerFirst() ? titleAndBanner.reverse() : titleAndBanner),
++					{
++						type: 'leaf',
++						data: { type: Parts.RIBBON_PART },
++						size: ribbonHeight,
++						visible: true
++					},
+ 					{
+ 						type: 'branch',
+ 						data: middleSection,
+diff --git a/src/vs/workbench/browser/parts/ribbon/media/ribbonpart.css b/src/vs/workbench/browser/parts/ribbon/media/ribbonpart.css
+new file mode 100644
+index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a5579107146f
+--- /dev/null
++++ b/src/vs/workbench/browser/parts/ribbon/media/ribbonpart.css
+@@ -0,0 +1,154 @@
++.monaco-workbench .part.ribbon {
++	background: var(--vscode-editor-background);
++	color: var(--vscode-foreground);
++	border-bottom: 1px solid var(--vscode-panel-border);
++}
++
++.ribbon-root {
++	display: flex;
++	flex-direction: column;
++	height: 100%;
++	min-width: 0;
++}
++
++.ribbon-tabs {
++	display: flex;
++	align-items: stretch;
++	height: 32px;
++	min-height: 32px;
++	padding-left: 6px;
++	border-bottom: 1px solid var(--vscode-panel-border);
++}
++
++.ribbon-tab,
++.ribbon-collapse,
++.ribbon-item {
++	border: 0;
++	color: inherit;
++	background: transparent;
++	font: inherit;
++}
++
++.ribbon-tab {
++	position: relative;
++	padding: 0 12px;
++	cursor: pointer;
++}
++
++.ribbon-tab:hover,
++.ribbon-item:hover:not(:disabled),
++.ribbon-collapse:hover {
++	background: var(--vscode-toolbar-hoverBackground);
++}
++
++.ribbon-tab[aria-selected="true"]::after {
++	position: absolute;
++	right: 8px;
++	bottom: 0;
++	left: 8px;
++	height: 2px;
++	content: '';
++	background: var(--vscode-focusBorder);
++}
++
++.ribbon-tab:focus-visible,
++.ribbon-item:focus-visible,
++.ribbon-collapse:focus-visible {
++	outline: 1px solid var(--vscode-focusBorder);
++	outline-offset: -1px;
++}
++
++.ribbon-collapse {
++	width: 32px;
++	margin-left: auto;
++	cursor: pointer;
++}
++
++.ribbon-content,
++.ribbon-overlay {
++	height: 72px;
++	box-sizing: border-box;
++	overflow-x: auto;
++	overflow-y: hidden;
++	background: var(--vscode-editor-background);
++	color: var(--vscode-foreground);
++	box-shadow: 0 4px 8px var(--vscode-widget-shadow);
++}
++
++.ribbon-groups {
++	display: flex;
++	align-items: stretch;
++	height: 100%;
++	width: max-content;
++	min-width: 100%;
++	padding: 3px 6px 2px;
++	box-sizing: border-box;
++}
++
++.ribbon-group {
++	display: flex;
++	flex-direction: column;
++	min-width: max-content;
++	padding: 0 6px;
++	border-right: 1px solid var(--vscode-panel-border);
++}
++
++.ribbon-items {
++	display: flex;
++	align-items: stretch;
++	gap: 2px;
++	height: 48px;
++}
++
++.ribbon-item {
++	display: flex;
++	align-items: center;
++	justify-content: center;
++	flex-direction: column;
++	min-width: 62px;
++	max-width: 118px;
++	padding: 2px 6px;
++	border-radius: 2px;
++	cursor: pointer;
++}
++
++.ribbon-items.compact .ribbon-item {
++	min-width: auto;
++	max-width: 150px;
++}
++
++.ribbon-item:disabled {
++	opacity: .45;
++	cursor: default;
++}
++
++.ribbon-item-icon {
++	width: 20px;
++	height: 20px;
++	font-size: 18px;
++	background-position: center;
++	background-repeat: no-repeat;
++	background-size: contain;
++}
++
++.ribbon-item-label {
++	max-width: 110px;
++	overflow: hidden;
++	font-size: 11px;
++	line-height: 15px;
++	text-align: center;
++	text-overflow: ellipsis;
++	white-space: nowrap;
++}
++
++.ribbon-group-title {
++	height: 14px;
++	font-size: 10px;
++	line-height: 14px;
++	text-align: center;
++	color: var(--vscode-descriptionForeground);
++}
++
++.ribbon-root.collapsed .ribbon-tabs {
++	border-bottom: 0;
++}
+diff --git a/src/vs/workbench/browser/parts/ribbon/ribbonExtensionPoint.ts b/src/vs/workbench/browser/parts/ribbon/ribbonExtensionPoint.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..0fc45fc6eeca9fb12f5281df2d1a63f00aa5403c
+--- /dev/null
++++ b/src/vs/workbench/browser/parts/ribbon/ribbonExtensionPoint.ts
+@@ -0,0 +1,218 @@
++/*---------------------------------------------------------------------------------------------
++ *  Copyright (c) Microsoft Corporation. All rights reserved.
++ *  Licensed under the MIT License. See License.txt in the project root for license information.
++ *--------------------------------------------------------------------------------------------*/
++
++import { Emitter, Event } from '../../../../base/common/event.js';
++import { IJSONSchema } from '../../../../base/common/jsonSchema.js';
++import { URI } from '../../../../base/common/uri.js';
++import { localize } from '../../../../nls.js';
++import { commandsExtensionPoint } from '../../../services/actions/common/menusExtensionPoint.js';
++import { ExtensionsRegistry } from '../../../services/extensions/common/extensionsRegistry.js';
++
++export interface IRibbonIconPath {
++	readonly light: string;
++	readonly dark: string;
++}
++
++export interface IRibbonItemContribution {
++	readonly command: string;
++	readonly title: string;
++	readonly icon: string | IRibbonIconPath;
++	readonly order?: number;
++	readonly when?: string;
++	readonly arguments?: readonly unknown[];
++}
++
++export interface IRibbonGroupContribution {
++	readonly id: string;
++	readonly title: string;
++	readonly order?: number;
++	readonly when?: string;
++	readonly items: readonly IRibbonItemContribution[];
++}
++
++export interface IRibbonTabContribution {
++	readonly id: string;
++	readonly title: string;
++	readonly order?: number;
++	readonly default?: boolean;
++	readonly when?: string;
++	readonly groups: readonly IRibbonGroupContribution[];
++}
++
++interface IRibbonContribution {
++	readonly tabs: readonly IRibbonTabContribution[];
++}
++
++export interface IRegisteredRibbonTab extends IRibbonTabContribution {
++	readonly extensionId: string;
++	readonly extensionLocation: URI;
++}
++
++export const enum RibbonBuiltinTabId {
++	File = 'workbench.ribbon.file',
++	View = 'workbench.ribbon.view',
++	Help = 'workbench.ribbon.help',
++}
++
++const reservedTabIds = new Set<string>([
++	RibbonBuiltinTabId.File,
++	RibbonBuiltinTabId.View,
++	RibbonBuiltinTabId.Help,
++]);
++
++export function isReservedRibbonTabId(id: string): boolean {
++	return reservedTabIds.has(id);
++}
++
++class RibbonRegistry {
++	private readonly _onDidChange = new Emitter<void>();
++	readonly onDidChange: Event<void> = this._onDidChange.event;
++
++	private _tabs: readonly IRegisteredRibbonTab[] = [];
++
++	get tabs(): readonly IRegisteredRibbonTab[] {
++		return this._tabs;
++	}
++
++	setTabs(tabs: readonly IRegisteredRibbonTab[]): void {
++		this._tabs = tabs;
++		this._onDidChange.fire();
++	}
++}
++
++export const ribbonRegistry = new RibbonRegistry();
++
++const orderProperty: IJSONSchema = {
++	type: 'number',
++	description: localize('ribbon.order', "Controls the order of the contributed Ribbon element."),
++};
++
++const whenProperty: IJSONSchema = {
++	type: 'string',
++	description: localize('ribbon.when', "Condition which must be true to show this Ribbon element."),
++};
++
++const ribbonItemSchema: IJSONSchema = {
++	type: 'object',
++	additionalProperties: false,
++	required: ['command', 'title', 'icon'],
++	properties: {
++		command: { type: 'string', description: localize('ribbon.command', "Identifier of a command declared in the commands contribution point.") },
++		title: { type: 'string', description: localize('ribbon.itemTitle', "Human readable label of the Ribbon command.") },
++		icon: {
++		description: localize('ribbon.icon', "Theme icon such as `{0}`, an extension-relative icon path, or light and dark icon paths.", '$(add)'),
++			anyOf: [
++				{ type: 'string' },
++				{ type: 'object', required: ['light', 'dark'], additionalProperties: false, properties: { light: { type: 'string' }, dark: { type: 'string' } } },
++			],
++		},
++		order: orderProperty,
++		when: whenProperty,
++		arguments: { type: 'array', description: localize('ribbon.arguments', "Arguments passed to the command."), items: {} },
++	},
++};
++
++const ribbonGroupSchema: IJSONSchema = {
++	type: 'object',
++	additionalProperties: false,
++	required: ['id', 'title', 'items'],
++	properties: {
++		id: { type: 'string' },
++		title: { type: 'string' },
++		order: orderProperty,
++		when: whenProperty,
++		items: { type: 'array', minItems: 1, items: ribbonItemSchema },
++	},
++};
++
++const ribbonContributionSchema: IJSONSchema = {
++	description: localize('vscode.extension.contributes.ribbon', "Contributes tabs, groups, and commands to the Workbench Ribbon."),
++	type: 'object',
++	additionalProperties: false,
++	required: ['tabs'],
++	properties: {
++		tabs: {
++			type: 'array',
++			minItems: 1,
++			items: {
++				type: 'object',
++				additionalProperties: false,
++				required: ['id', 'title', 'groups'],
++				properties: {
++					id: { type: 'string' },
++					title: { type: 'string' },
++					order: orderProperty,
++					default: { type: 'boolean' },
++					when: whenProperty,
++					groups: { type: 'array', minItems: 1, items: ribbonGroupSchema },
++				},
++			},
++		},
++	},
++};
++
++const ribbonExtensionPoint = ExtensionsRegistry.registerExtensionPoint<IRibbonContribution>({
++	extensionPoint: 'ribbon',
++	deps: [commandsExtensionPoint],
++	jsonSchema: ribbonContributionSchema,
++});
++
++function orderOf(value: { readonly order?: number }): number {
++	return typeof value.order === 'number' ? value.order : 0;
++}
++
++ribbonExtensionPoint.setHandler((extensions) => {
++	const tabs: IRegisteredRibbonTab[] = [];
++	const tabIds = new Set<string>();
++
++	for (const extension of extensions) {
++		const contribution = extension.value as IRibbonContribution;
++		if (!contribution || !Array.isArray(contribution.tabs)) {
++			extension.collector.error(localize('ribbon.invalidRoot', "The Ribbon contribution must contain a tabs array."));
++			continue;
++		}
++
++		for (const tab of contribution.tabs as readonly IRibbonTabContribution[]) {
++			if (!tab?.id || !tab.title || !Array.isArray(tab.groups)) {
++				extension.collector.error(localize('ribbon.invalidTab', "Each Ribbon tab must define id, title, and groups."));
++				continue;
++			}
++			if (tabIds.has(tab.id)) {
++				extension.collector.error(localize('ribbon.duplicateTab', "Ribbon tab id '{0}' is already registered.", tab.id));
++				continue;
++			}
++			if (isReservedRibbonTabId(tab.id)) {
++				extension.collector.error(localize('ribbon.reservedTab', "Ribbon tab id '{0}' is reserved by the Workbench.", tab.id));
++				continue;
++			}
++
++			const groupIds = new Set<string>();
++			const groups = tab.groups.filter((group: IRibbonGroupContribution) => {
++				if (!group?.id || !group.title || !Array.isArray(group.items)) {
++					extension.collector.error(localize('ribbon.invalidGroup', "Each Ribbon group must define id, title, and items."));
++					return false;
++				}
++				if (groupIds.has(group.id)) {
++					extension.collector.error(localize('ribbon.duplicateGroup', "Ribbon group id '{0}' is duplicated in tab '{1}'.", group.id, tab.id));
++					return false;
++				}
++				groupIds.add(group.id);
++				return true;
++			}).map((group: IRibbonGroupContribution) => ({ ...group, items: [...group.items].sort((a: IRibbonItemContribution, b: IRibbonItemContribution) => orderOf(a) - orderOf(b) || a.command.localeCompare(b.command)) }))
++				.sort((a: IRibbonGroupContribution, b: IRibbonGroupContribution) => orderOf(a) - orderOf(b) || a.id.localeCompare(b.id));
++
++			tabIds.add(tab.id);
++			tabs.push({
++				...tab,
++				groups,
++				extensionId: extension.description.identifier.value,
++				extensionLocation: extension.description.extensionLocation,
++			});
++		}
++	}
++
++	tabs.sort((a, b) => orderOf(a) - orderOf(b) || a.extensionId.localeCompare(b.extensionId) || a.id.localeCompare(b.id));
++	ribbonRegistry.setTabs(tabs);
++});
+diff --git a/src/vs/workbench/browser/parts/ribbon/ribbonPart.ts b/src/vs/workbench/browser/parts/ribbon/ribbonPart.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f53279a98c1e4
+--- /dev/null
++++ b/src/vs/workbench/browser/parts/ribbon/ribbonPart.ts
+@@ -0,0 +1,497 @@
++/*---------------------------------------------------------------------------------------------
++ *  Copyright (c) Microsoft Corporation. All rights reserved.
++ *  Licensed under the MIT License. See License.txt in the project root for license information.
++ *--------------------------------------------------------------------------------------------*/
++
++import './media/ribbonpart.css';
++import { $, addDisposableListener, append, clearNode, EventType, getWindow, isAncestor } from '../../../../base/browser/dom.js';
++import { asCSSUrl } from '../../../../base/browser/cssValue.js';
++import { IAction, SubmenuAction } from '../../../../base/common/actions.js';
++import { Codicon } from '../../../../base/common/codicons.js';
++import { mnemonicButtonLabel } from '../../../../base/common/labels.js';
++import { DisposableStore } from '../../../../base/common/lifecycle.js';
++import * as resources from '../../../../base/common/resources.js';
++import { ThemeIcon } from '../../../../base/common/themables.js';
++import { URI } from '../../../../base/common/uri.js';
++import { localize } from '../../../../nls.js';
++import { MenuId, IMenuService, MenuItemAction, MenuRegistry, SubmenuItemAction } from '../../../../platform/actions/common/actions.js';
++import { ICommandService } from '../../../../platform/commands/common/commands.js';
++import { ContextKeyExpr, ContextKeyExpression, IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
++import { IContextMenuService, IContextViewService, IOpenContextView } from '../../../../platform/contextview/browser/contextView.js';
++import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
++import { INotificationService } from '../../../../platform/notification/common/notification.js';
++import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
++import { isDark } from '../../../../platform/theme/common/theme.js';
++import { IThemeService } from '../../../../platform/theme/common/themeService.js';
++import { Part } from '../../part.js';
++import { IWorkbenchLayoutService, Parts } from '../../../services/layout/browser/layoutService.js';
++import { IRegisteredRibbonTab, IRibbonGroupContribution, IRibbonItemContribution, RibbonBuiltinTabId, ribbonRegistry } from './ribbonExtensionPoint.js';
++import { IRibbonService } from './ribbonService.js';
++
++const EXPANDED_HEIGHT = 104;
++const COLLAPSED_HEIGHT = 32;
++const STORAGE_COLLAPSED = 'workbench.ribbon.collapsed';
++const STORAGE_ACTIVE_TAB = 'workbench.ribbon.activeTab';
++
++interface IBuiltinRibbonTab {
++	readonly id: string;
++	readonly title: string;
++	readonly order: number;
++	readonly menuId: MenuId;
++}
++
++type RibbonTab = IRegisteredRibbonTab | IBuiltinRibbonTab;
++
++const BUILTIN_TABS: readonly IBuiltinRibbonTab[] = [
++	{ id: RibbonBuiltinTabId.File, title: localize('ribbon.file', "File"), order: 10, menuId: MenuId.MenubarFileMenu },
++	{ id: RibbonBuiltinTabId.View, title: localize('ribbon.view', "View"), order: 20, menuId: MenuId.MenubarViewMenu },
++	{ id: RibbonBuiltinTabId.Help, title: localize('ribbon.help', "Help"), order: 100, menuId: MenuId.MenubarHelpMenu },
++];
++
++function isBuiltinTab(tab: RibbonTab): tab is IBuiltinRibbonTab {
++	return 'menuId' in tab;
++}
++
++function orderOf(tab: RibbonTab): number {
++	return tab.order ?? 0;
++}
++
++function builtinActionFallbackIcon(tab: IBuiltinRibbonTab, action: IAction): ThemeIcon {
++	if (action instanceof SubmenuAction) {
++		return Codicon.listTree;
++	}
++
++	const id = action.id.toLowerCase();
++	if (id.includes('new') && id.includes('file')) {
++		return Codicon.newFile;
++	}
++	if (id.includes('new') && id.includes('window')) {
++		return Codicon.emptyWindow;
++	}
++	if (id.includes('openrecent')) {
++		return Codicon.history;
++	}
++	if (id.includes('open') && (id.includes('file') || id.includes('folder') || id.includes('workspace'))) {
++		return Codicon.folderOpened;
++	}
++	if (id.includes('saveall')) {
++		return Codicon.saveAll;
++	}
++	if (id.includes('saveas')) {
++		return Codicon.saveAs;
++	}
++	if (id.includes('autosave')) {
++		return Codicon.sync;
++	}
++	if (id.includes('save')) {
++		return Codicon.save;
++	}
++	if (id.includes('quit') || id.includes('exit') || id.includes('signout')) {
++		return Codicon.signOut;
++	}
++	if (id.includes('close')) {
++		return Codicon.close;
++	}
++
++	switch (tab.id) {
++		case RibbonBuiltinTabId.File: return Codicon.file;
++		case RibbonBuiltinTabId.View: return Codicon.eye;
++		default: return Codicon.question;
++	}
++}
++
++export class RibbonPart extends Part implements IRibbonService {
++	declare readonly _serviceBrand: undefined;
++
++	readonly minimumWidth = 0;
++	readonly maximumWidth = Number.POSITIVE_INFINITY;
++
++	get minimumHeight(): number { return this.collapsed ? COLLAPSED_HEIGHT : EXPANDED_HEIGHT; }
++	get maximumHeight(): number { return this.minimumHeight; }
++
++	private readonly tabDisposables = this._register(new DisposableStore());
++	private readonly contentDisposables = this._register(new DisposableStore());
++	private readonly contributionContextKeys = new Set<string>();
++	private root!: HTMLElement;
++	private tabList!: HTMLElement;
++	private tabButtons: HTMLButtonElement[] = [];
++	private content!: HTMLElement;
++	private collapseButton!: HTMLButtonElement;
++	private activeTabId: string;
++	private hasPersistedActiveTab: boolean;
++	private collapsed: boolean;
++	private overlay: IOpenContextView | undefined;
++
++	constructor(
++		@IThemeService themeService: IThemeService,
++		@IStorageService private readonly storageService: IStorageService,
++		@IWorkbenchLayoutService layoutService: IWorkbenchLayoutService,
++		@IContextKeyService private readonly contextKeyService: IContextKeyService,
++		@IMenuService private readonly menuService: IMenuService,
++		@ICommandService private readonly commandService: ICommandService,
++		@IContextMenuService private readonly contextMenuService: IContextMenuService,
++		@IContextViewService private readonly contextViewService: IContextViewService,
++		@INotificationService private readonly notificationService: INotificationService,
++	) {
++		super(Parts.RIBBON_PART, { hasTitle: false }, themeService, storageService, layoutService);
++		this.collapsed = storageService.getBoolean(STORAGE_COLLAPSED, StorageScope.PROFILE, false);
++		this.activeTabId = storageService.get(STORAGE_ACTIVE_TAB, StorageScope.PROFILE, '') ?? '';
++		this.hasPersistedActiveTab = this.activeTabId.length > 0;
++
++		this.refreshContributionContextKeys();
++		this._register(ribbonRegistry.onDidChange(() => {
++			this.refreshContributionContextKeys();
++			this.render();
++		}));
++		this._register(this.contextKeyService.onDidChangeContext(event => {
++			if (event.affectsSome(this.contributionContextKeys)) {
++				this.render();
++			}
++		}));
++		this._register(themeService.onDidColorThemeChange(() => this.refreshActiveContent()));
++	}
++
++	protected override createContentArea(parent: HTMLElement): HTMLElement {
++		this.element = parent;
++		this.root = append(parent, $('.ribbon-root'));
++		this.tabList = append(this.root, $('.ribbon-tabs'));
++		this.tabList.setAttribute('role', 'tablist');
++		this.tabList.setAttribute('aria-label', localize('ribbon.ariaLabel', "Ribbon"));
++		this.content = append(this.root, $('.ribbon-content'));
++		this.content.setAttribute('role', 'tabpanel');
++
++		this.collapseButton = append(this.tabList, $('button.ribbon-collapse'));
++		this.collapseButton.type = 'button';
++		this._register(addDisposableListener(this.collapseButton, EventType.CLICK, () => this.setCollapsed(!this.collapsed)));
++		this._register(addDisposableListener(this.tabList, EventType.KEY_DOWN, event => this.onTabKeyDown(event)));
++		this.render();
++		return this.root;
++	}
++
++	private visibleTabs(): RibbonTab[] {
++		const contributed = ribbonRegistry.tabs.filter(tab => this.matches(tab.when));
++		return [...BUILTIN_TABS, ...contributed].sort((a, b) => orderOf(a) - orderOf(b) || a.id.localeCompare(b.id));
++	}
++
++	private refreshContributionContextKeys(): void {
++		this.contributionContextKeys.clear();
++		for (const tab of ribbonRegistry.tabs) {
++			this.addContextKeys(ContextKeyExpr.deserialize(tab.when));
++			for (const group of tab.groups) {
++				this.addContextKeys(ContextKeyExpr.deserialize(group.when));
++				for (const item of group.items) {
++					this.addContextKeys(ContextKeyExpr.deserialize(item.when));
++					this.addContextKeys(MenuRegistry.getCommand(item.command)?.precondition);
++				}
++			}
++		}
++	}
++
++	private addContextKeys(expression: ContextKeyExpression | undefined): void {
++		for (const key of expression?.keys() ?? []) {
++			this.contributionContextKeys.add(key);
++		}
++	}
++
++	private matches(expression: string | undefined): boolean {
++		return !expression || this.contextKeyService.contextMatchesRules(ContextKeyExpr.deserialize(expression));
++	}
++
++	private ensureActiveTab(tabs: readonly RibbonTab[]): RibbonTab | undefined {
++		let active = tabs.find(tab => tab.id === this.activeTabId);
++		const defaultTab = tabs.find(tab => !isBuiltinTab(tab) && tab.default);
++		if (!active || (!this.hasPersistedActiveTab && defaultTab)) {
++			active = defaultTab ?? tabs.find(tab => tab.id === RibbonBuiltinTabId.File) ?? tabs[0];
++			this.activeTabId = active?.id ?? '';
++		}
++		return active;
++	}
++
++	private render(): void {
++		if (!this.root) {
++			return;
++		}
++
++		const focusedTabId = this.getFocusedTabId();
++		this.tabDisposables.clear();
++		this.contentDisposables.clear();
++		this.overlay?.close();
++		this.overlay = undefined;
++		for (const button of this.tabButtons) {
++			button.remove();
++		}
++		this.tabButtons = [];
++
++		const tabs = this.visibleTabs();
++		const active = this.ensureActiveTab(tabs);
++		for (const tab of tabs) {
++			const button = this.tabList.ownerDocument.createElement('button');
++			button.type = 'button';
++			button.className = 'ribbon-tab';
++			button.textContent = tab.title;
++			button.dataset.tabId = tab.id;
++			button.setAttribute('role', 'tab');
++			button.setAttribute('aria-selected', String(tab === active));
++			button.tabIndex = tab === active ? 0 : -1;
++			this.tabList.insertBefore(button, this.collapseButton);
++			this.tabButtons.push(button);
++			this.tabDisposables.add(addDisposableListener(button, EventType.CLICK, () => this.selectTab(tab)));
++			this.tabDisposables.add(addDisposableListener(button, EventType.DBLCLICK, () => this.setCollapsed(!this.collapsed)));
++		}
++
++		this.collapseButton.className = `ribbon-collapse codicon codicon-chevron-${this.collapsed ? 'down' : 'up'}`;
++		this.collapseButton.setAttribute('aria-label', this.collapsed ? localize('ribbon.expand', "Expand Ribbon") : localize('ribbon.collapse', "Collapse Ribbon"));
++		this.root.classList.toggle('collapsed', this.collapsed);
++		this.content.hidden = this.collapsed;
++		this.renderActiveContent(active);
++		this.findTabButton(focusedTabId)?.focus();
++	}
++
++	private selectTab(tab: RibbonTab): void {
++		this.activeTabId = tab.id;
++		this.hasPersistedActiveTab = true;
++		this.storageService.store(STORAGE_ACTIVE_TAB, tab.id, StorageScope.PROFILE, StorageTarget.USER);
++		for (const button of this.tabButtons) {
++			const selected = button.dataset.tabId === tab.id;
++			button.setAttribute('aria-selected', String(selected));
++			button.tabIndex = selected ? 0 : -1;
++		}
++		if (this.collapsed) {
++			this.showOverlay(tab);
++		} else {
++			this.renderActiveContent(tab);
++		}
++	}
++
++	private renderActiveContent(tab: RibbonTab | undefined): void {
++		this.contentDisposables.clear();
++		if (tab && !this.collapsed) {
++			this.renderTabContent(tab, this.content, false);
++		} else {
++			clearNode(this.content);
++		}
++	}
++
++	private refreshActiveContent(): void {
++		if (!this.root) {
++			return;
++		}
++		const active = this.ensureActiveTab(this.visibleTabs());
++		if (this.collapsed) {
++			if (active && this.overlay) {
++				this.showOverlay(active);
++			}
++		} else {
++			this.renderActiveContent(active);
++		}
++	}
++
++	private getFocusedTabId(): string | undefined {
++		const activeElement = getWindow(this.tabList).document.activeElement;
++		return this.tabButtons.find(button => button === activeElement)?.dataset.tabId;
++	}
++
++	private findTabButton(id: string | undefined): HTMLButtonElement | undefined {
++		return this.tabButtons.find(button => button.dataset.tabId === id);
++	}
++
++	private setCollapsed(collapsed: boolean): void {
++		if (this.collapsed === collapsed) {
++			return;
++		}
++		this.collapsed = collapsed;
++		this.storageService.store(STORAGE_COLLAPSED, collapsed, StorageScope.PROFILE, StorageTarget.USER);
++		this.render();
++		this._onDidChange.fire(undefined);
++	}
++
++	private showOverlay(tab: RibbonTab): void {
++		this.overlay?.close();
++		let firstFocusableButton: HTMLButtonElement | undefined;
++		const open = this.contextViewService.showContextView({
++			getAnchor: () => this.root,
++			render: container => {
++				container.classList.add('ribbon-overlay');
++				container.style.width = `${this.dimension?.width ?? this.root.clientWidth}px`;
++				const store = new DisposableStore();
++				store.add(addDisposableListener(getWindow(this.root).document, EventType.MOUSE_DOWN, event => {
++					const eventTarget = event.target as Node | null;
++					if (!isAncestor(eventTarget, container) && !isAncestor(eventTarget, this.root)) {
++						this.contextViewService.hideContextView();
++					}
++				}, true));
++				firstFocusableButton = this.renderTabContent(tab, container, true, store);
++				return store;
++			},
++			focus: () => firstFocusableButton?.focus(),
++			onHide: () => { this.overlay = undefined; },
++		});
++		this.overlay = open;
++	}
++
++	private renderTabContent(tab: RibbonTab, container: HTMLElement, closeAfterRun: boolean, store: DisposableStore = this.contentDisposables): HTMLButtonElement | undefined {
++		clearNode(container);
++		container.setAttribute('aria-label', tab.title);
++		const groups = append(container, $('.ribbon-groups'));
++
++		if (isBuiltinTab(tab)) {
++			const menu = store.add(this.menuService.createMenu(tab.menuId, this.contextKeyService, { emitEventsForSubmenuChanges: true }));
++			store.add(menu.onDidChange(() => {
++				if (closeAfterRun) {
++					if (this.collapsed && this.activeTabId === tab.id) {
++						this.showOverlay(tab);
++					}
++				} else if (!this.collapsed && this.activeTabId === tab.id) {
++					this.renderActiveContent(tab);
++				}
++			}));
++			const actions = menu.getActions().flatMap(([, groupActions]) => groupActions);
++			return this.renderActionGroup(groups, tab, actions, closeAfterRun, store);
++		}
++
++		let firstFocusableButton: HTMLButtonElement | undefined;
++		for (const group of tab.groups.filter(group => this.matches(group.when))) {
++			firstFocusableButton ??= this.renderContributionGroup(groups, tab, group, closeAfterRun, store);
++		}
++		return firstFocusableButton;
++	}
++
++	private renderActionGroup(parent: HTMLElement, tab: IBuiltinRibbonTab, actions: readonly IAction[], closeAfterRun: boolean, store: DisposableStore): HTMLButtonElement | undefined {
++		const group = append(parent, $('.ribbon-group'));
++		group.setAttribute('role', 'group');
++		group.setAttribute('aria-label', tab.title);
++		const items = append(group, $('.ribbon-items.compact'));
++		let firstFocusableButton: HTMLButtonElement | undefined;
++		for (const action of actions) {
++			const label = mnemonicButtonLabel(action.label, true);
++			const { button, icon } = this.createButton(items, label, action.class, action.enabled);
++			this.renderBuiltinActionIcon(icon, tab, action);
++			if (!button.disabled) {
++				firstFocusableButton ??= button;
++			}
++			store.add(addDisposableListener(button, EventType.CLICK, () => {
++				if (action instanceof SubmenuAction) {
++					this.contextMenuService.showContextMenu({ getAnchor: () => button, getActions: () => [...action.actions] });
++					return;
++				}
++				void Promise.resolve(action.run()).catch(error => this.notificationService.error(error));
++				if (closeAfterRun) {
++					this.contextViewService.hideContextView();
++				}
++			}));
++		}
++		append(group, $('div.ribbon-group-title')).textContent = tab.title;
++		return firstFocusableButton;
++	}
++
++	private renderBuiltinActionIcon(container: HTMLElement, tab: IBuiltinRibbonTab, action: IAction): void {
++		if (action.class) {
++			return;
++		}
++
++		if (action instanceof MenuItemAction || action instanceof SubmenuItemAction) {
++			const actionIcon = action.item.icon;
++			if (ThemeIcon.isThemeIcon(actionIcon)) {
++				container.classList.add(...ThemeIcon.asClassNameArray(actionIcon));
++				return;
++			}
++
++			let iconUri: URI | undefined;
++			if (URI.isUri(actionIcon)) {
++				iconUri = actionIcon;
++			} else if (actionIcon) {
++				iconUri = isDark(this.themeService.getColorTheme().type) ? actionIcon.dark : actionIcon.light;
++			}
++			if (iconUri) {
++				container.style.backgroundImage = asCSSUrl(iconUri);
++				container.classList.add('ribbon-file-icon');
++				return;
++			}
++		}
++
++		container.classList.add(...ThemeIcon.asClassNameArray(builtinActionFallbackIcon(tab, action)));
++	}
++
++	private renderContributionGroup(parent: HTMLElement, tab: IRegisteredRibbonTab, contribution: IRibbonGroupContribution, closeAfterRun: boolean, store: DisposableStore): HTMLButtonElement | undefined {
++		const group = append(parent, $('.ribbon-group'));
++		group.setAttribute('role', 'group');
++		group.setAttribute('aria-label', contribution.title);
++		const items = append(group, $('.ribbon-items'));
++		let firstFocusableButton: HTMLButtonElement | undefined;
++		for (const item of contribution.items.filter(item => this.matches(item.when))) {
++			const button = this.renderContributionItem(items, tab, item, closeAfterRun, store);
++			if (!button.disabled) {
++				firstFocusableButton ??= button;
++			}
++		}
++		append(group, $('div.ribbon-group-title')).textContent = contribution.title;
++		return firstFocusableButton;
++	}
++
++	private renderContributionItem(parent: HTMLElement, tab: IRegisteredRibbonTab, item: IRibbonItemContribution, closeAfterRun: boolean, store: DisposableStore): HTMLButtonElement {
++		const command = MenuRegistry.getCommand(item.command);
++		const enabled = !command?.precondition || this.contextKeyService.contextMatchesRules(command.precondition);
++		const { button, icon } = this.createButton(parent, item.title, undefined, enabled);
++		const iconValue = typeof item.icon === 'string' ? item.icon : isDark(this.themeService.getColorTheme().type) ? item.icon.dark : item.icon.light;
++		const themeIcon = ThemeIcon.fromString(iconValue);
++		if (themeIcon) {
++			icon.classList.add(...ThemeIcon.asClassNameArray(themeIcon));
++		} else {
++			icon.style.backgroundImage = asCSSUrl(resources.joinPath(tab.extensionLocation, iconValue));
++			icon.classList.add('ribbon-file-icon');
++		}
++		store.add(addDisposableListener(button, EventType.CLICK, () => {
++			void this.commandService.executeCommand(item.command, ...(item.arguments ?? [])).catch(error => this.notificationService.error(error));
++			if (closeAfterRun) {
++				this.contextViewService.hideContextView();
++			}
++		}));
++		return button;
++	}
++
++	private createButton(parent: HTMLElement, label: string, iconClass: string | undefined, enabled: boolean): { button: HTMLButtonElement; icon: HTMLElement } {
++		const button = append(parent, $<HTMLButtonElement>('button.ribbon-item'));
++		button.type = 'button';
++		button.disabled = !enabled;
++		button.setAttribute('aria-label', label);
++		const icon = append(button, $('.ribbon-item-icon'));
++		if (iconClass) {
++			icon.classList.add(...iconClass.split(/\s+/).filter(Boolean));
++		}
++		append(button, $('span.ribbon-item-label')).textContent = label;
++		return { button, icon };
++	}
++
++	private onTabKeyDown(event: KeyboardEvent): void {
++		const tabs = this.tabButtons;
++		const current = tabs.indexOf(getWindow(this.tabList).document.activeElement as HTMLButtonElement);
++		if (current < 0) {
++			return;
++		}
++		let target = current;
++		if (event.key === 'ArrowRight') {
++			target = (current + 1) % tabs.length;
++		} else if (event.key === 'ArrowLeft') {
++			target = (current - 1 + tabs.length) % tabs.length;
++		} else if (event.key === 'Home') {
++			target = 0;
++		} else if (event.key === 'End') {
++			target = tabs.length - 1;
++		} else {
++			return;
++		}
++		event.preventDefault();
++		tabs[target].focus();
++		tabs[target].click();
++	}
++
++	focus(): void {
++		this.findTabButton(this.activeTabId)?.focus();
++	}
++
++	toJSON(): object {
++		return { type: Parts.RIBBON_PART };
++	}
++}
++
++registerSingleton(IRibbonService, RibbonPart, InstantiationType.Eager);
+diff --git a/src/vs/workbench/browser/parts/ribbon/ribbonService.ts b/src/vs/workbench/browser/parts/ribbon/ribbonService.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..4cc6d313846c96a3fb1f6a6b238da4c4ecda7a35
+--- /dev/null
++++ b/src/vs/workbench/browser/parts/ribbon/ribbonService.ts
+@@ -0,0 +1,13 @@
++/*---------------------------------------------------------------------------------------------
++ *  Copyright (c) Microsoft Corporation. All rights reserved.
++ *  Licensed under the MIT License. See License.txt in the project root for license information.
++ *--------------------------------------------------------------------------------------------*/
++
++import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
++
++export const IRibbonService = createDecorator<IRibbonService>('ribbonService');
++
++export interface IRibbonService {
++	readonly _serviceBrand: undefined;
++	focus(): void;
++}
+diff --git a/src/vs/workbench/browser/workbench.ts b/src/vs/workbench/browser/workbench.ts
+index 10e2c3edace79197d928d4586b369ff4f09e414a..229cfd740e1b2f20120531fd5bd94f41074a5d00 100644
+--- a/src/vs/workbench/browser/workbench.ts
++++ b/src/vs/workbench/browser/workbench.ts
+@@ -346,6 +346,7 @@ export class Workbench extends Layout {
+ 		for (const { id, role, classes, options } of [
+ 			{ id: Parts.TITLEBAR_PART, role: 'none', classes: ['titlebar'] },
+ 			{ id: Parts.BANNER_PART, role: 'banner', classes: ['banner'] },
++			{ id: Parts.RIBBON_PART, role: 'region', classes: ['ribbon'] },
+ 			{ id: Parts.ACTIVITYBAR_PART, role: 'none', classes: ['activitybar', this.getSideBarPosition() === Position.LEFT ? 'left' : 'right'] }, // Use role 'none' for some parts to make screen readers less chatty #114892
+ 			{ id: Parts.SIDEBAR_PART, role: 'none', classes: ['sidebar', this.getSideBarPosition() === Position.LEFT ? 'left' : 'right'] },
+ 			{ id: Parts.EDITOR_PART, role: 'main', classes: ['editor'], options: { restorePreviousState: this.willRestoreEditors() } },
+diff --git a/src/vs/workbench/contrib/splash/browser/partsSplash.ts b/src/vs/workbench/contrib/splash/browser/partsSplash.ts
+index 8280bf593ca3d0b0a714b4911c765db1fa40c759..828fe5e153ddf95b74a97d3362ce28ddc94ecfd1 100644
+--- a/src/vs/workbench/contrib/splash/browser/partsSplash.ts
++++ b/src/vs/workbench/contrib/splash/browser/partsSplash.ts
+@@ -93,6 +93,7 @@ export class PartsSplash {
+ 				sideBarSide: this._layoutService.getSideBarPosition() === Position.RIGHT ? 'right' : 'left',
+ 				editorPartMinWidth: DEFAULT_EDITOR_MIN_DIMENSIONS.width,
+ 				titleBarHeight: this._layoutService.isVisible(Parts.TITLEBAR_PART, mainWindow) ? dom.getTotalHeight(assertReturnsDefined(this._layoutService.getContainer(mainWindow, Parts.TITLEBAR_PART))) : 0,
++				ribbonHeight: dom.getTotalHeight(assertReturnsDefined(this._layoutService.getContainer(mainWindow, Parts.RIBBON_PART))),
+ 				activityBarWidth: this._layoutService.isVisible(Parts.ACTIVITYBAR_PART) ? dom.getTotalWidth(assertReturnsDefined(this._layoutService.getContainer(mainWindow, Parts.ACTIVITYBAR_PART))) : 0,
+ 				sideBarWidth: this._layoutService.isVisible(Parts.SIDEBAR_PART) ? dom.getTotalWidth(assertReturnsDefined(this._layoutService.getContainer(mainWindow, Parts.SIDEBAR_PART))) : 0,
+ 				auxiliaryBarWidth: this._layoutService.isAuxiliaryBarMaximized() ? Number.MAX_SAFE_INTEGER /* marker for maximized state */ : this._layoutService.isVisible(Parts.AUXILIARYBAR_PART) ? dom.getTotalWidth(assertReturnsDefined(this._layoutService.getContainer(mainWindow, Parts.AUXILIARYBAR_PART))) : 0,
+diff --git a/src/vs/workbench/services/layout/browser/layoutService.ts b/src/vs/workbench/services/layout/browser/layoutService.ts
+index 46243a4447e57276aa01b085ad35cbb5212b98cc..3ffe5e2f01ea7685b9c3d45a62c8ac8a65109caa 100644
+--- a/src/vs/workbench/services/layout/browser/layoutService.ts
++++ b/src/vs/workbench/services/layout/browser/layoutService.ts
+@@ -21,6 +21,7 @@ export const IWorkbenchLayoutService = refineServiceDecorator<ILayoutService, IW
+ export const enum Parts {
+ 	TITLEBAR_PART = 'workbench.parts.titlebar',
+ 	BANNER_PART = 'workbench.parts.banner',
++	RIBBON_PART = 'workbench.parts.ribbon',
+ 	ACTIVITYBAR_PART = 'workbench.parts.activitybar',
+ 	SIDEBAR_PART = 'workbench.parts.sidebar',
+ 	PANEL_PART = 'workbench.parts.panel',
+diff --git a/src/vs/workbench/test/browser/parts/ribbon/ribbonPart.test.ts b/src/vs/workbench/test/browser/parts/ribbon/ribbonPart.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..a0f49739c6fa0656f1fb391730c09e7869a331d5
+--- /dev/null
++++ b/src/vs/workbench/test/browser/parts/ribbon/ribbonPart.test.ts
+@@ -0,0 +1,201 @@
++/*---------------------------------------------------------------------------------------------
++ *  Copyright (c) Microsoft Corporation. All rights reserved.
++ *  Licensed under the MIT License. See License.txt in the project root for license information.
++ *--------------------------------------------------------------------------------------------*/
++
++import assert from 'assert';
++import { Action, IAction } from '../../../../../base/common/actions.js';
++import { Event } from '../../../../../base/common/event.js';
++import { DisposableStore, IDisposable } from '../../../../../base/common/lifecycle.js';
++import { URI } from '../../../../../base/common/uri.js';
++import { mainWindow } from '../../../../../base/browser/window.js';
++import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../../base/test/common/utils.js';
++import { IMenuService } from '../../../../../platform/actions/common/actions.js';
++import { ICommandService } from '../../../../../platform/commands/common/commands.js';
++import { ContextKeyService } from '../../../../../platform/contextkey/browser/contextKeyService.js';
++import { IContextMenuService, IContextViewDelegate, IContextViewService } from '../../../../../platform/contextview/browser/contextView.js';
++import { INotificationService } from '../../../../../platform/notification/common/notification.js';
++import { TestConfigurationService } from '../../../../../platform/configuration/test/common/testConfigurationService.js';
++import { ColorScheme } from '../../../../../platform/theme/common/theme.js';
++import { TestColorTheme, TestThemeService } from '../../../../../platform/theme/test/common/testThemeService.js';
++import { TestStorageService } from '../../../common/workbenchTestServices.js';
++import { TestLayoutService } from '../../workbenchTestServices.js';
++import { IRegisteredRibbonTab, isReservedRibbonTabId, RibbonBuiltinTabId, ribbonRegistry } from '../../../../browser/parts/ribbon/ribbonExtensionPoint.js';
++import { RibbonPart } from '../../../../browser/parts/ribbon/ribbonPart.js';
++
++suite('RibbonPart', () => {
++	const disposables = new DisposableStore();
++	let fixture: HTMLElement;
++
++	setup(() => {
++		fixture = mainWindow.document.createElement('div');
++		mainWindow.document.body.appendChild(fixture);
++		ribbonRegistry.setTabs([]);
++	});
++
++	teardown(() => {
++		disposables.clear();
++		ribbonRegistry.setTabs([]);
++		fixture.remove();
++	});
++
++	function contribution(overrides: Partial<IRegisteredRibbonTab> = {}): IRegisteredRibbonTab {
++		return {
++			id: 'test.ribbon.tab',
++			title: 'Test',
++			default: true,
++			groups: [{
++				id: 'test',
++				title: 'Test',
++				items: [{
++					command: 'test.ribbon.command',
++					title: 'Test command',
++					icon: '$(add)',
++				}],
++			}],
++			extensionId: 'test.ribbon',
++			extensionLocation: URI.file('/test-extension'),
++			...overrides,
++		};
++	}
++
++	function createPart(themeService = new TestThemeService(), contextKeyService = disposables.add(new ContextKeyService(new TestConfigurationService())), menuActions: readonly IAction[] = [], contextViewService = {} as IContextViewService): RibbonPart {
++		const menuService = {
++			createMenu: () => ({
++				onDidChange: Event.None,
++				getActions: () => menuActions.length > 0 ? [['navigation', menuActions]] : [],
++				dispose: () => { },
++			}),
++		} as unknown as IMenuService;
++		const part = disposables.add(new RibbonPart(
++			themeService,
++			disposables.add(new TestStorageService()),
++			new TestLayoutService(),
++			contextKeyService,
++			menuService,
++			{} as ICommandService,
++			{} as IContextMenuService,
++			contextViewService,
++			{} as INotificationService,
++		));
++		part.create(fixture);
++		return part;
++	}
++
++	function tab(id: string): HTMLButtonElement | undefined {
++		return Array.from(fixture.getElementsByClassName('ribbon-tab')).find(element => (element as HTMLButtonElement).dataset.tabId === id) as HTMLButtonElement | undefined;
++	}
++
++	function fileIcon(): HTMLElement {
++		return fixture.getElementsByClassName('ribbon-file-icon').item(0) as HTMLElement;
++	}
++
++	test('keeps keyboard focus while selecting tabs and supports double click collapse', () => {
++		const part = createPart();
++		const fileTab = tab(RibbonBuiltinTabId.File)!;
++		const viewTab = tab(RibbonBuiltinTabId.View)!;
++		fileTab.focus();
++
++		fileTab.dispatchEvent(new mainWindow.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
++
++		assert.strictEqual(mainWindow.document.activeElement, viewTab);
++		assert.strictEqual(viewTab.getAttribute('aria-selected'), 'true');
++		assert.strictEqual(viewTab.isConnected, true);
++
++		viewTab.dispatchEvent(new mainWindow.MouseEvent('dblclick', { bubbles: true }));
++		assert.strictEqual(part.minimumHeight, 32);
++	});
++
++	test('renders fallback icons and removes menubar mnemonics from built-in actions', () => {
++		createPart(undefined, undefined, [
++			disposables.add(new Action('workbench.action.files.newUntitledFile', '&&New File...')),
++			disposables.add(new Action('test.builtin.unmapped', 'Unmapped')),
++		]);
++
++		const [button, unmappedButton] = fixture.querySelectorAll<HTMLButtonElement>('.ribbon-item');
++		assert.strictEqual(button.getAttribute('aria-label'), 'New File...');
++		assert.strictEqual(button.querySelector('.ribbon-item-label')?.textContent, 'New File...');
++		assert.strictEqual(button.querySelector('.ribbon-item-icon')?.classList.contains('codicon-new-file'), true);
++		assert.strictEqual(unmappedButton.querySelector('.ribbon-item-icon')?.classList.contains('codicon-file'), true);
++	});
++
++	test('closes every built-in collapsed overlay on activity bar mousedown before its click handler runs', () => {
++		let delegate: IContextViewDelegate | undefined;
++		let renderDisposable: IDisposable | undefined;
++		let hidden = false;
++		const overlayElement = mainWindow.document.createElement('div');
++		const activityBarElement = mainWindow.document.createElement('div');
++		fixture.append(overlayElement, activityBarElement);
++		const contextViewService = {
++			showContextView: (newDelegate: IContextViewDelegate) => {
++				delegate = newDelegate;
++				renderDisposable = newDelegate.render(overlayElement);
++				newDelegate.focus?.();
++				return { close: () => renderDisposable?.dispose() };
++			},
++			hideContextView: () => {
++				hidden = true;
++				renderDisposable?.dispose();
++				delegate?.onHide?.();
++			},
++		} as unknown as IContextViewService;
++		createPart(undefined, undefined, [disposables.add(new Action('workbench.action.files.newUntitledFile', 'New File...'))], contextViewService);
++		const fileTab = tab(RibbonBuiltinTabId.File)!;
++		fileTab.dispatchEvent(new mainWindow.MouseEvent('dblclick', { bubbles: true }));
++
++		for (const tabId of [RibbonBuiltinTabId.File, RibbonBuiltinTabId.View, RibbonBuiltinTabId.Help]) {
++			hidden = false;
++			tab(tabId)!.dispatchEvent(new mainWindow.MouseEvent('click', { bubbles: true }));
++
++			const overlayButton = overlayElement.querySelector<HTMLButtonElement>('.ribbon-item')!;
++			assert.strictEqual(mainWindow.document.activeElement, overlayButton);
++			activityBarElement.dispatchEvent(new mainWindow.MouseEvent('mousedown', { bubbles: true }));
++
++			assert.strictEqual(hidden, true, `expected ${tabId} overlay to close`);
++		}
++	});
++
++	test('ignores unrelated context changes and refreshes affected contributions', () => {
++		const contextKeyService = disposables.add(new ContextKeyService(new TestConfigurationService()));
++		const visible = contextKeyService.createKey<boolean>('ribbon.testVisible', true);
++		const unrelated = contextKeyService.createKey<boolean>('ribbon.unrelated', false);
++		ribbonRegistry.setTabs([contribution({ when: 'ribbon.testVisible' })]);
++		createPart(undefined, contextKeyService);
++
++		const originalFileTab = tab(RibbonBuiltinTabId.File)!;
++		unrelated.set(true);
++		assert.strictEqual(tab(RibbonBuiltinTabId.File), originalFileTab);
++
++		visible.set(false);
++		assert.strictEqual(tab('test.ribbon.tab'), undefined);
++	});
++
++	test('updates light and dark icon paths when the color theme changes', () => {
++		const themeService = new TestThemeService(new TestColorTheme({}, ColorScheme.DARK));
++		ribbonRegistry.setTabs([contribution({
++			groups: [{
++				id: 'test',
++				title: 'Test',
++				items: [{
++					command: 'test.ribbon.command',
++					title: 'Test command',
++					icon: { light: 'light.svg', dark: 'dark.svg' },
++				}],
++			}],
++		})]);
++		createPart(themeService);
++
++		assert.match(fileIcon().style.backgroundImage, /dark\.svg/);
++		themeService.setTheme(new TestColorTheme({}, ColorScheme.LIGHT));
++		assert.match(fileIcon().style.backgroundImage, /light\.svg/);
++	});
++
++	test('reserves built-in tab identifiers', () => {
++		assert.strictEqual(isReservedRibbonTabId(RibbonBuiltinTabId.File), true);
++		assert.strictEqual(isReservedRibbonTabId(RibbonBuiltinTabId.View), true);
++		assert.strictEqual(isReservedRibbonTabId(RibbonBuiltinTabId.Help), true);
++		assert.strictEqual(isReservedRibbonTabId('test.ribbon.tab'), false);
++	});
++
++	ensureNoDisposablesAreLeakedInTestSuite();
++});
+diff --git a/src/vs/workbench/workbench.common.main.ts b/src/vs/workbench/workbench.common.main.ts
+index 532c20d1cf1db34b86c19eca277ac8782732dee6..372f93d7534714cec340b6d8c9d2931617851be4 100644
+--- a/src/vs/workbench/workbench.common.main.ts
++++ b/src/vs/workbench/workbench.common.main.ts
+@@ -54,6 +54,8 @@ import './browser/parts/editor/editor.contribution.js';
+ import './browser/parts/editor/editorParts.js';
+ import './browser/parts/paneCompositePartService.js';
+ import './browser/parts/banner/bannerPart.js';
++import './browser/parts/ribbon/ribbonExtensionPoint.js';
++import './browser/parts/ribbon/ribbonPart.js';
+ import './browser/parts/statusbar/statusbarPart.js';
+ import './browser/parts/titlebar/menubar.contribution.js';
+ 

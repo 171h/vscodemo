@@ -1,0 +1,24 @@
+Intent:
+  Change fromLocalNormal to use PackageManager.None instead of PackageManager.Npm,
+  matching the fromLocalEsbuild behavior. Non-esbuild built-in extensions do not
+  require npm dependency resolution, and the npm check inside vsce's checkNPM()
+  can fail with "spawn UNKNOWN" on Windows CI under Node.js 22.
+
+  The hunk deliberately avoids the adjacent @vscode/vsce import so the same patch
+  applies after VSCodium rewrites that import to @vscodium/vsce.
+
+Verified baselines:
+  - vscode 1.126.0 (commit 7e7950df89d055b5a378379db9ee14290772148a)
+  - vscode 1.126.0 after VSCodium 1.126.04524 00-vsce-use-custom-lib.patch
+
+diff --git a/build/lib/extensions.ts b/build/lib/extensions.ts
+index d87ff9aa..e1a2b3c4 100644
+--- a/build/lib/extensions.ts
++++ b/build/lib/extensions.ts
+@@ -130,5 +130,5 @@ function fromLocalNormal(extensionPath: string): Stream {
+ 	const result = es.through();
+ 
+-	vsce.listFiles({ cwd: extensionPath, packageManager: vsce.PackageManager.Npm })
++	vsce.listFiles({ cwd: extensionPath, packageManager: vsce.PackageManager.None })
+ 		.then(fileNames => {
+ 			const files = fileNames

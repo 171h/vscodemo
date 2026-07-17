@@ -1,0 +1,14 @@
+# 补丁文件与 shell 脚本必须保持 LF，否则在 Windows 上 git apply 会失败
+.gitattributes text eol=lf
+*.patch text eol=lf -whitespace
+*.diff text eol=lf
+*.sh text eol=lf
+*.mjs text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# 锁定文件
+.gitmodules text eol=lf
+.gitignore text eol=lf
+upstream.lock.json text eol=lf
+product/*.json text eol=lf

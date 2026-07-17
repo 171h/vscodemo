@@ -1,0 +1,60 @@
+意图: 让 Windows Inno Setup 安装器的发布者名称与相关链接从 product.json
+读取，避免 VSCodium 发行后处理把安装器及“已安装的应用”发布者写成 VSCodium。
+
+机制: gulp 打包任务把 companyName、win32PublisherUrl、reportIssueUrl 与
+downloadUrl 注入 Inno 预处理变量；code.iss 只消费变量。Windows 文件版本优先
+读取构建脚本派生的纯数字 WINDOWS_PRODUCT_VERSION，本地开发模式则从 SemVer
+中移除 prerelease/build 后缀。普通 Code - OSS 未配置这些字段时保持微软上游
+默认值。VSCodium prepare_vscode.sh 后续针对硬编码文本的替换不再命中这些行，
+因此 VSCodemo 配置不会被二次覆盖。用户安装器在管理员权限下运行时的提示也
+改用产品名和下载地址，避免正文残留 VS Code/VSCodium。
+
+验证双基线: vscode 1.126.0；VSCodium 1.126.04524 的 Windows 补丁仅修改
+code.iss 的 MinVersion 以及 gulpfile 后部的 Appx 定义，本补丁的四个 hunk 均避开对应上下文。
+
+diff --git a/build/gulpfile.vscode.win32.ts b/build/gulpfile.vscode.win32.ts
+--- a/build/gulpfile.vscode.win32.ts
++++ b/build/gulpfile.vscode.win32.ts
+@@ -82,6 +82,10 @@ function buildWin32Setup(arch: string, target: string): task.CallbackTask {
+ 
+ 		const definitions: Record<string, unknown> = {
+ 			NameLong: product.nameLong,
++			PublisherName: product.companyName ?? 'Microsoft Corporation',
++			PublisherUrl: product.win32PublisherUrl ?? 'https://code.visualstudio.com/',
++			SupportUrl: product.reportIssueUrl ?? 'https://code.visualstudio.com/',
++			UpdatesUrl: product.downloadUrl ?? 'https://code.visualstudio.com/',
+ 			NameShort: product.nameShort,
+ 			DirName: product.win32DirName,
+ 			Version: pkg.version,
+@@ -88,3 +92,3 @@ function buildWin32Setup(arch: string, target: string): task.CallbackTask {
+-			RawVersion: pkg.version.replace(/-\w+$/, ''),
++			RawVersion: process.env.WINDOWS_PRODUCT_VERSION ?? pkg.version.replace(/[-+].*$/, ''),
+ 			Commit: commit,
+ 			NameVersion: product.win32NameVersion + (target === 'user' ? ' (User)' : ''),
+diff --git a/build/win32/code.iss b/build/win32/code.iss
+--- a/build/win32/code.iss
++++ b/build/win32/code.iss
+@@ -8,10 +8,10 @@
+ AppId={#AppId}
+ AppName={#NameLong}
+ AppVerName={#NameVersion}
+-AppPublisher=Microsoft Corporation
+-AppPublisherURL=https://code.visualstudio.com/
+-AppSupportURL=https://code.visualstudio.com/
+-AppUpdatesURL=https://code.visualstudio.com/
++AppPublisher={#PublisherName}
++AppPublisherURL={#PublisherUrl}
++AppSupportURL={#SupportUrl}
++AppUpdatesURL={#UpdatesUrl}
+ DefaultGroupName={#NameLong}
+ AllowNoIcons=yes
+ OutputDir={#OutputDir}
+@@ -1333,7 +1333,7 @@ function InitializeSetup(): Boolean;
+ 
+   #if "user" == InstallTarget
+     if not WizardSilent() and IsAdmin() then begin
+-      if MsgBox('This User Installer is not meant to be run as an Administrator. If you would like to install VS Code for all users in this system, download the System Installer instead from https://code.visualstudio.com. Are you sure you want to continue?', mbError, MB_OKCANCEL) = IDCANCEL then begin
++      if MsgBox('This User Installer is not meant to be run as an Administrator. If you would like to install {#NameLong} for all users in this system, download the System Installer instead from {#UpdatesUrl}. Are you sure you want to continue?', mbError, MB_OKCANCEL) = IDCANCEL then begin
+         Result := False;
+       end;
+     end;

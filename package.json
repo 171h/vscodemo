@@ -1,0 +1,16 @@
+{
+  "name": "vscodemo",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.1.3",
+  "type": "module",
+  "description": "用于开发和调试 Ribbon 扩展点的精简 VSCodium 构建",
+  "scripts": {
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.4"
+  }
+}

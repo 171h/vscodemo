@@ -1,0 +1,55 @@
+diff --git a/build/lib/optimize.ts b/build/lib/optimize.ts
+index 21a17ee1..3f8c84a6 100644
+--- a/build/lib/optimize.ts
++++ b/build/lib/optimize.ts
+@@ -31,6 +31,34 @@ declare module 'gulp-sourcemaps' {
+ 
+ const REPO_ROOT_PATH = path.join(import.meta.dirname, '../..');
+ 
++function createConcurrencyLimiter(limit: number): <T>(task: () => Promise<T>) => Promise<T> {
++	let active = 0;
++	const pending: Array<() => void> = [];
++
++	const acquire = () => new Promise<void>(resolve => {
++		const start = () => {
++			active++;
++			resolve();
++		};
++
++		if (active < limit) {
++			start();
++		} else {
++			pending.push(start);
++		}
++	});
++
++	return async task => {
++		await acquire();
++		try {
++			return await task();
++		} finally {
++			active--;
++			pending.shift()?.();
++		}
++	};
++}
++
+ export interface IBundleESMTaskOpts {
+ 	/**
+ 	 * The folder to read files from.
+@@ -228,2 +256,5 @@ export function minifyTask(src: string, sourceMapBaseUrl?: string): (cb: any) =>
+ 	const target = getBuildTarget();
++	const configuredConcurrency = Number.parseInt(process.env.VSCODE_MINIFY_CONCURRENCY ?? '', 10);
++	const concurrency = Number.isInteger(configuredConcurrency) && configuredConcurrency > 0 ? configuredConcurrency : Number.POSITIVE_INFINITY;
++	const minify = createConcurrencyLimiter(concurrency);
+ 
+@@ -239,3 +270,3 @@ export function minifyTask(src: string, sourceMapBaseUrl?: string): (cb: any) =>
+ 			es.map((f: any, cb) => {
+-				esbuild.build({
++				minify(() => esbuild.build({
+ 					entryPoints: [f.path],
+@@ -248,3 +279,3 @@ export function minifyTask(src: string, sourceMapBaseUrl?: string): (cb: any) =>
+ 					write: false,
+-				}).then(res => {
++				})).then(res => {
+ 					const jsOrCSSFile = res.outputFiles.find(f => /\.(js|css)$/.test(f.path))!;

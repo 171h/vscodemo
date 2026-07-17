@@ -1,0 +1,548 @@
+name: Release VS Code
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: GitHub Release tag
+        required: true
+        default: "1.126.04524"
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+  APP_NAME: VSCodemo
+  BINARY_NAME: vscodemo
+  ORG_NAME: 171h
+  ASSETS_REPOSITORY: ${{ github.repository }}
+  GH_REPO_PATH: ${{ github.repository }}
+  VSCODE_QUALITY: stable
+  VSCODE_ARCH: x64
+  SHOULD_BUILD_REH: "yes"
+  SHOULD_BUILD_REH_WEB: "yes"
+  SHOULD_BUILD_CLI: "yes"
+  SHOULD_BUILD_DMG: "yes"
+  VSCODEMO_BUILD_UNSIGNED_DMG: "yes"
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 720
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Temporarily disabled: uncomment this entry to restore Linux x64 builds.
+          # - name: Linux x64
+          #   platform: linux
+          #   runner: ubuntu-22.04
+          #   artifact: VSCodemo-linux-x64
+          - name: Windows x64
+            platform: windows
+            runner: windows-2022
+            artifact: VSCodemo-windows-x64
+          # Temporarily disabled: uncomment this entry to restore macOS x64 builds.
+          # - name: macOS x64
+          #   platform: osx
+          #   runner: macos-15-intel
+          #   artifact: VSCodemo-darwin-x64
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Resolve release metadata
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            RELEASE_TAG="${GITHUB_REF_NAME}"
+          else
+            RELEASE_TAG="${{ github.event.inputs.release_tag }}"
+          fi
+          if [[ ! "${RELEASE_TAG}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag: ${RELEASE_TAG}" >&2
+            exit 1
+          fi
+          if ! VSCODEMO_BUILD_COMMIT="$(git rev-parse "${RELEASE_TAG}^{commit}" 2>/dev/null)"; then
+            if [[ "${RELEASE_TAG}" != v* ]] && VSCODEMO_BUILD_COMMIT="$(git rev-parse "v${RELEASE_TAG}^{commit}" 2>/dev/null)"; then
+              RELEASE_TAG="v${RELEASE_TAG}"
+            else
+              echo "Release tag not found: ${RELEASE_TAG}" >&2
+              exit 1
+            fi
+          fi
+          VSCODEMO_BUILD_DATE="$(git log -1 --format=%cI "${VSCODEMO_BUILD_COMMIT}")"
+          RELEASE_VERSION="${RELEASE_TAG#v}"
+          echo "RELEASE_TAG=${RELEASE_TAG}" >> "${GITHUB_ENV}"
+          echo "RELEASE_VERSION=${RELEASE_VERSION}" >> "${GITHUB_ENV}"
+          echo "VSCODEMO_RELEASE_TAG=${RELEASE_TAG}" >> "${GITHUB_ENV}"
+          echo "VSCODEMO_RELEASE_VERSION=${RELEASE_VERSION}" >> "${GITHUB_ENV}"
+          echo "VSCODEMO_BUILD_COMMIT=${VSCODEMO_BUILD_COMMIT}" >> "${GITHUB_ENV}"
+          echo "VSCODEMO_BUILD_DATE=${VSCODEMO_BUILD_DATE}" >> "${GITHUB_ENV}"
+          echo "BUILD_SOURCEVERSION=${VSCODEMO_BUILD_COMMIT}" >> "${GITHUB_ENV}"
+          echo "BUILD_SOURCEVERSION_DATE=${VSCODEMO_BUILD_DATE}" >> "${GITHUB_ENV}"
+          echo "OS_NAME=${{ matrix.platform }}" >> "${GITHUB_ENV}"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: vscodium/.nvmrc
+
+      - name: Enable pnpm
+        run: |
+          set -euo pipefail
+          if command -v corepack >/dev/null 2>&1; then
+            if ! { corepack enable && corepack prepare pnpm@11.1.3 --activate; }; then
+              npm install --global pnpm@11.1.3
+            fi
+          elif ! command -v pnpm >/dev/null 2>&1; then
+            npm install --global pnpm@11.1.3
+          fi
+          pnpm --version
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Install Linux build dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          set -euo pipefail
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            build-essential \
+            desktop-file-utils \
+            fakeroot \
+            g++ \
+            gcc \
+            jq \
+            libfuse2 \
+            libkrb5-dev \
+            libsecret-1-dev \
+            libx11-dev \
+            libxkbfile-dev \
+            make \
+            patchelf \
+            pkg-config \
+            rpm \
+            zsync
+
+      - name: Install Windows packaging dependencies
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          choco install wixtoolset --no-progress -y
+          $wix = Get-ChildItem "${env:ProgramFiles(x86)}" -Directory -Filter "WiX Toolset*" |
+            Sort-Object Name -Descending |
+            Select-Object -First 1
+          if (-not $wix) {
+            throw "WiX Toolset install directory not found"
+          }
+          Add-Content -Path $env:GITHUB_ENV -Value "WIX=$($wix.FullName)\"
+
+      - name: Build VSCodemo assets
+        env:
+          # @vscode/ripgrep 等 postinstall 走 GitHub API 下载，匿名请求会被 403 限流
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/build.sh --assets
+
+      - name: Upload prepared vscode source
+        if: matrix.platform == 'linux'
+        run: |
+          set -euo pipefail
+          cd vscodium
+          find vscode -type f -not -path "*/node_modules/*" -not -path "vscode/.build/node/*" -not -path "vscode/.git/*" > vscode.txt
+          echo "vscode/.build/extensions/node_modules" >> vscode.txt
+          echo "vscode/.git" >> vscode.txt
+          tar -czf vscode.tar.gz -T vscode.txt
+
+      - name: Upload prepared source artifact
+        if: matrix.platform == 'linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: VSCodemo-vscode-source
+          path: vscodium/vscode.tar.gz
+          retention-days: 7
+
+      - name: Collect release assets
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          cp -a vscodium/assets/. release-assets/
+          find release-assets -maxdepth 1 -type f | sort
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: release-assets/*
+          retention-days: 14
+
+  alpine-reh:
+    name: Build Alpine REH x64
+    # Disabled while the release workflow is Windows-only.
+    # Remove this guard after restoring the Linux matrix/source artifact above.
+    if: ${{ false }}
+    needs: build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+    defaults:
+      run:
+        shell: bash
+    env:
+      OS_NAME: alpine
+      VSCODE_ARCH: x64
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Resolve release metadata
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            RELEASE_TAG="${GITHUB_REF_NAME}"
+          else
+            RELEASE_TAG="${{ github.event.inputs.release_tag }}"
+          fi
+          if [[ ! "${RELEASE_TAG}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag: ${RELEASE_TAG}" >&2
+            exit 1
+          fi
+          if ! VSCODEMO_BUILD_COMMIT="$(git rev-parse "${RELEASE_TAG}^{commit}" 2>/dev/null)"; then
+            if [[ "${RELEASE_TAG}" != v* ]] && VSCODEMO_BUILD_COMMIT="$(git rev-parse "v${RELEASE_TAG}^{commit}" 2>/dev/null)"; then
+              RELEASE_TAG="v${RELEASE_TAG}"
+            else
+              echo "Release tag not found: ${RELEASE_TAG}" >&2
+              exit 1
+            fi
+          fi
+          VSCODEMO_BUILD_DATE="$(git log -1 --format=%cI "${VSCODEMO_BUILD_COMMIT}")"
+          RELEASE_VERSION="${RELEASE_TAG#v}"
+          echo "RELEASE_TAG=${RELEASE_TAG}" >> "${GITHUB_ENV}"
+          echo "RELEASE_VERSION=${RELEASE_VERSION}" >> "${GITHUB_ENV}"
+          echo "VSCODEMO_RELEASE_TAG=${RELEASE_TAG}" >> "${GITHUB_ENV}"
+          echo "VSCODEMO_RELEASE_VERSION=${RELEASE_VERSION}" >> "${GITHUB_ENV}"
+          echo "VSCODEMO_BUILD_COMMIT=${VSCODEMO_BUILD_COMMIT}" >> "${GITHUB_ENV}"
+          echo "VSCODEMO_BUILD_DATE=${VSCODEMO_BUILD_DATE}" >> "${GITHUB_ENV}"
+          echo "BUILD_SOURCEVERSION=${VSCODEMO_BUILD_COMMIT}" >> "${GITHUB_ENV}"
+          echo "BUILD_SOURCEVERSION_DATE=${VSCODEMO_BUILD_DATE}" >> "${GITHUB_ENV}"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: vscodium/.nvmrc
+
+      - name: Enable pnpm
+        run: |
+          set -euo pipefail
+          if command -v corepack >/dev/null 2>&1; then
+            if ! { corepack enable && corepack prepare pnpm@11.1.3 --activate; }; then
+              npm install --global pnpm@11.1.3
+            fi
+          elif ! command -v pnpm >/dev/null 2>&1; then
+            npm install --global pnpm@11.1.3
+          fi
+          pnpm --version
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Alpine REH dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update -y
+          sudo apt-get install -y build-essential jq libkrb5-dev
+
+      - name: Download prepared source
+        uses: actions/download-artifact@v4
+        with:
+          name: VSCodemo-vscode-source
+          path: vscodium
+
+      - name: Build Alpine remote hosts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          npm_config_arch: x64
+        run: |
+          set -euo pipefail
+          cd vscodium
+
+          # 预置 musl Node.js（自带 npm 10.9）供容器内 npm ci 使用：
+          # postinstall 的 docker 命令会把 vscode/.build/nodejs-musl/usr/local/bin
+          # 加到 PATH 最前；镜像自带的 npm 11 对 overrides 语义与生成锁文件的
+          # npm 10 不同，会误报 package-lock 不同步（Missing: cpu-features）。
+          # 对齐 MS 官方 alpine 流水线的做法，node 版本取自 remote/.npmrc 的 target。
+          tar -xzf ./vscode.tar.gz vscode/remote/.npmrc
+          NODE_VERSION="$(grep '^target=' vscode/remote/.npmrc | cut -d '"' -f 2)"
+          NODE_TAR="node-v${NODE_VERSION}-linux-x64-musl.tar.gz"
+          mkdir -p vscode/.build/nodejs-musl/usr/local
+          curl -fsSL "https://unofficial-builds.nodejs.org/download/release/v${NODE_VERSION}/${NODE_TAR}" -o "/tmp/${NODE_TAR}"
+          tar -xzf "/tmp/${NODE_TAR}" -C vscode/.build/nodejs-musl/usr/local --strip-components=1
+          rm -f "/tmp/${NODE_TAR}"
+          echo "==> musl node 就绪: $(vscode/.build/nodejs-musl/usr/local/bin/node -v 2>/dev/null || echo '仅容器内可执行')"
+
+          bash build/alpine/package_reh.sh
+
+      - name: Collect Alpine assets
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          cp -a vscodium/assets/. release-assets/
+          find release-assets -maxdepth 1 -type f | sort
+
+      - name: Upload Alpine artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VSCodemo-alpine-reh-x64
+          path: release-assets/*
+          retention-days: 14
+
+  snap:
+    name: Build Linux Snap x64
+    # Disabled while the release workflow is Windows-only.
+    # Remove this guard after restoring the Linux x64 artifact above.
+    if: ${{ false }}
+    needs: build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Resolve release metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            RELEASE_TAG="${GITHUB_REF_NAME}"
+          else
+            RELEASE_TAG="${{ github.event.inputs.release_tag }}"
+          fi
+          if [[ ! "${RELEASE_TAG}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag: ${RELEASE_TAG}" >&2
+            exit 1
+          fi
+          if ! VSCODEMO_BUILD_COMMIT="$(git rev-parse "${RELEASE_TAG}^{commit}" 2>/dev/null)"; then
+            if [[ "${RELEASE_TAG}" != v* ]] && VSCODEMO_BUILD_COMMIT="$(git rev-parse "v${RELEASE_TAG}^{commit}" 2>/dev/null)"; then
+              RELEASE_TAG="v${RELEASE_TAG}"
+            else
+              echo "Release tag not found: ${RELEASE_TAG}" >&2
+              exit 1
+            fi
+          fi
+          VSCODEMO_BUILD_DATE="$(git log -1 --format=%cI "${VSCODEMO_BUILD_COMMIT}")"
+          RELEASE_VERSION="${RELEASE_TAG#v}"
+          echo "RELEASE_TAG=${RELEASE_TAG}" >> "${GITHUB_ENV}"
+          echo "RELEASE_VERSION=${RELEASE_VERSION}" >> "${GITHUB_ENV}"
+          echo "VSCODEMO_RELEASE_TAG=${RELEASE_TAG}" >> "${GITHUB_ENV}"
+          echo "VSCODEMO_RELEASE_VERSION=${RELEASE_VERSION}" >> "${GITHUB_ENV}"
+          echo "VSCODEMO_BUILD_COMMIT=${VSCODEMO_BUILD_COMMIT}" >> "${GITHUB_ENV}"
+          echo "VSCODEMO_BUILD_DATE=${VSCODEMO_BUILD_DATE}" >> "${GITHUB_ENV}"
+          echo "BUILD_SOURCEVERSION=${VSCODEMO_BUILD_COMMIT}" >> "${GITHUB_ENV}"
+          echo "BUILD_SOURCEVERSION_DATE=${VSCODEMO_BUILD_DATE}" >> "${GITHUB_ENV}"
+
+      - name: Download Linux assets
+        uses: actions/download-artifact@v4
+        with:
+          name: VSCodemo-linux-x64
+          path: build/snapcraft/input
+
+      - name: Stage Snap launcher
+        shell: bash
+        run: cp -a vscodium/stores/snapcraft/stable/snap/local build/snapcraft/snap/
+
+      - name: Build Snap
+        id: build
+        uses: diddlesnaps/snapcraft-multiarch-action@v1.9.0
+        with:
+          path: build/snapcraft
+          architecture: amd64
+          # snapcraft 9 不再支持 base:core20（与 VSCodium 上游 store 配置一致），锁定 8.x
+          snapcraft-channel: 8.x/stable
+
+      - name: Collect Snap asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          cp "${{ steps.build.outputs.snap }}" release-assets/
+          (
+            cd release-assets
+            for file in *.snap; do
+              sha1sum "${file}" > "${file}.sha1"
+              sha256sum "${file}" > "${file}.sha256"
+            done
+          )
+          find release-assets -maxdepth 1 -type f | sort
+
+      - name: Upload Snap artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VSCodemo-linux-snap-x64
+          path: release-assets/*
+          retention-days: 14
+
+  publish:
+    name: Publish GitHub Release
+    needs:
+      - build
+      # Linux-only release artifacts are paused while this workflow is Windows-only.
+      # - alpine-reh
+      # - snap
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            RELEASE_TAG="${GITHUB_REF_NAME}"
+          else
+            RELEASE_TAG="${{ github.event.inputs.release_tag }}"
+          fi
+
+          if [[ ! "${RELEASE_TAG}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag: ${RELEASE_TAG}" >&2
+            exit 1
+          fi
+
+          if ! VSCODEMO_BUILD_COMMIT="$(git rev-parse "${RELEASE_TAG}^{commit}" 2>/dev/null)"; then
+            if [[ "${RELEASE_TAG}" != v* ]] && VSCODEMO_BUILD_COMMIT="$(git rev-parse "v${RELEASE_TAG}^{commit}" 2>/dev/null)"; then
+              RELEASE_TAG="v${RELEASE_TAG}"
+            else
+              echo "Release tag not found: ${RELEASE_TAG}" >&2
+              exit 1
+            fi
+          fi
+          VSCODEMO_BUILD_DATE="$(git log -1 --format=%cI "${VSCODEMO_BUILD_COMMIT}")"
+          RELEASE_VERSION="${RELEASE_TAG#v}"
+          echo "RELEASE_TAG=${RELEASE_TAG}" >> "${GITHUB_ENV}"
+          echo "RELEASE_VERSION=${RELEASE_VERSION}" >> "${GITHUB_ENV}"
+          echo "VSCODEMO_BUILD_COMMIT=${VSCODEMO_BUILD_COMMIT}" >> "${GITHUB_ENV}"
+          echo "VSCODEMO_BUILD_DATE=${VSCODEMO_BUILD_DATE}" >> "${GITHUB_ENV}"
+
+      - name: Download all release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: VSCodemo-*x64
+          path: release-assets
+          merge-multiple: true
+
+      - name: Verify x86 64bits asset set
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APP_NAME_LC="$(echo "${APP_NAME}" | tr '[:upper:]' '[:lower:]')"
+          expected=(
+            "${APP_NAME}UserSetup-x64-${RELEASE_VERSION}.exe"
+            "${APP_NAME}Setup-x64-${RELEASE_VERSION}.exe"
+            "${APP_NAME}-win32-x64-${RELEASE_VERSION}.zip"
+            "${APP_NAME}-x64-${RELEASE_VERSION}.msi"
+            "${APP_NAME}-x64-updates-disabled-${RELEASE_VERSION}.msi"
+            "${APP_NAME_LC}-reh-win32-x64-${RELEASE_VERSION}.tar.gz"
+            "${APP_NAME_LC}-reh-web-win32-x64-${RELEASE_VERSION}.tar.gz"
+            "${APP_NAME_LC}-cli-win32-x64-${RELEASE_VERSION}.tar.gz"
+            # macOS assets are paused while this workflow is Windows-only.
+            # "${APP_NAME}.x64.${RELEASE_VERSION}.dmg"
+            # "${APP_NAME}-darwin-x64-${RELEASE_VERSION}.zip"
+            # "${APP_NAME_LC}-reh-darwin-x64-${RELEASE_VERSION}.tar.gz"
+            # "${APP_NAME_LC}-reh-web-darwin-x64-${RELEASE_VERSION}.tar.gz"
+            # "${APP_NAME_LC}-cli-darwin-x64-${RELEASE_VERSION}.tar.gz"
+            # Linux desktop/Snap assets are paused while this workflow is Windows-only.
+            # "${BINARY_NAME}_${RELEASE_VERSION}_amd64.deb"
+            # "${BINARY_NAME}-${RELEASE_VERSION}-el8.x86_64.rpm"
+            # "${APP_NAME}-linux-x64-${RELEASE_VERSION}.tar.gz"
+            # "${APP_NAME}-${RELEASE_VERSION}.glibc*-x86_64.AppImage"
+            # "${APP_NAME}-${RELEASE_VERSION}.glibc*-x86_64.AppImage.zsync"
+            # "${BINARY_NAME}_${RELEASE_VERSION}_amd64.snap"
+            # "${APP_NAME_LC}-reh-linux-x64-${RELEASE_VERSION}.tar.gz"
+            # "${APP_NAME_LC}-reh-web-linux-x64-${RELEASE_VERSION}.tar.gz"
+            # "${APP_NAME_LC}-cli-linux-x64-${RELEASE_VERSION}.tar.gz"
+            # Alpine remote-host assets are paused while this workflow is Windows-only.
+            # "${APP_NAME_LC}-reh-alpine-x64-${RELEASE_VERSION}.tar.gz"
+            # "${APP_NAME_LC}-reh-web-alpine-x64-${RELEASE_VERSION}.tar.gz"
+          )
+
+          missing=0
+          for pattern in "${expected[@]}"; do
+            if ! compgen -G "release-assets/${pattern}" >/dev/null; then
+              echo "Missing asset: ${pattern}" >&2
+              missing=1
+            fi
+          done
+
+          find release-assets -maxdepth 1 -type f | sort
+          exit "${missing}"
+
+      - name: Publish GitHub Release
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          NOTES_FILE="$(mktemp)"
+          cat > "${NOTES_FILE}" <<EOF
+          VSCodemo ${RELEASE_TAG}
+
+          - VS Code upstream: $(node -p "require('./upstream.lock.json').vscode.tag") @ $(node -p "require('./upstream.lock.json').vscode.commit")
+          - Build commit: ${VSCODEMO_BUILD_COMMIT}
+          - Build date: ${VSCODEMO_BUILD_DATE}
+          - Asset version: ${RELEASE_VERSION}
+          - Assets: Windows x86 64bits
+          EOF
+
+          CHANGELOG_FILE="docs/changelog/${RELEASE_TAG}.md"
+          if [ -f "${CHANGELOG_FILE}" ]; then
+            echo "" >> "${NOTES_FILE}"
+            echo "---" >> "${NOTES_FILE}"
+            echo "" >> "${NOTES_FILE}"
+            cat "${CHANGELOG_FILE}" >> "${NOTES_FILE}"
+            echo "  changelog 已附加: ${CHANGELOG_FILE}"
+          else
+            echo "  changelog 文件未找到，将使用基本 release notes: ${CHANGELOG_FILE}"
+          fi
+
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" release-assets/* --clobber
+            # 更新已存在的 release 的 notes
+            gh release edit "${RELEASE_TAG}" --notes-file "${NOTES_FILE}"
+          else
+            gh release create "${RELEASE_TAG}" release-assets/* \
+              --title "VSCodemo ${RELEASE_TAG}" \
+              --notes-file "${NOTES_FILE}"
+          fi
