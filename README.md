@@ -3,7 +3,7 @@
 本分支构建一个用于扩展开发与调试的专用 VS Code 宿主。它以 VSCodium 构建链为
 基础，仅保留 `main` 中的 Ribbon 能力，并把产品名改为 `VSCodemo`。
 
-与 `main` 相比，本分支不包含 MagicStudio 的界面裁剪、默认语言、菜单改造、
+与 `main` 相比，本分支不包含 VSCodemo 的界面裁剪、默认语言、菜单改造、
 ActivityBar/Panel 改造或自研内置扩展。`ext-engineer` 也不会内置到产物中，避免
 通过 Extension Development Host 调试时同时加载两个副本。
 

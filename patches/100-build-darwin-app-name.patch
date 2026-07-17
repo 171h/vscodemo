@@ -1,5 +1,5 @@
 macOS 的 .app 包名取自 gulp 打包配置 productAppName（默认 = product.nameLong）。
-本项目 nameLong 是含中文与空格的品牌名（"Magic Studio - 建筑计算平台"），而
+本项目 nameLong 是含中文与空格的品牌名（"VS Codemo"），而
 VSCodium 构建链（build_cli.sh、prepare_assets.sh）假定包名为 ${nameShort}.app，
 导致 macOS CLI 二进制拷贝与产物打包找不到目录而失败。
 

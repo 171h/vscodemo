@@ -12,8 +12,7 @@
 
 ## 项目概览
 
-本仓库将 [microsoft/vscode](https://github.com/microsoft/vscode) 魔改为建筑计算
-软件基础平台（MagicStudio），使用 VSCodium 构建链。核心是五层叠加模型：
+本仓库将 [microsoft/vscode](https://github.com/microsoft/vscode) 魔改为 VSCodemo，使用 VSCodium 构建链。核心是五层叠加模型：
 
 | 层 | 位置 | 职责 |
 | --- | --- | --- |
