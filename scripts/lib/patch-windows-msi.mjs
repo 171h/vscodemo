@@ -3,10 +3,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const [buildScriptPath, wixSourcePath] = process.argv.slice(2);
+const [buildScriptPath, wixSourcePath, wixVariablesPath] = process.argv.slice(2);
 
-if (!buildScriptPath || !wixSourcePath) {
-  console.error('usage: node scripts/lib/patch-windows-msi.mjs <build.sh> <vscodium.wxs>');
+if (!buildScriptPath || !wixSourcePath || !wixVariablesPath) {
+  console.error('usage: node scripts/lib/patch-windows-msi.mjs <build.sh> <vscodium.wxs> <vscodium-variables.wxi>');
   process.exit(2);
 }
 
@@ -109,6 +109,21 @@ wixSource = replaceRequired(
   'MSI 桌面快捷方式展示名称'
 );
 fs.writeFileSync(wixSourcePath, wixSource);
+
+// VSCodium 上游在 vscodium-variables.wxi 硬编码 RTMProductVersion="0.0.1"，
+// 配合 vscodium.wxs:27 的 UpgradeVersion 形成 [RTM, current) 升级区间。
+// vscodemo 首发版本同样是 0.0.1，导致 Minimum == Maximum 且 IncludeMaximum=no，
+// 区间退化为空集，WiX light.exe 链接 MSI 时触发 ICE61 (LGHT0204)。把 RTM
+// 起点下调到 0.0.0，使 [0.0.0, 0.0.1) 非空，升级语义保持正确（任何早于
+// 当前的版本都可被检测升级），同时避开 ICE61 边界。
+let wixVariables = fs.readFileSync(wixVariablesPath, 'utf8');
+wixVariables = replaceRequired(
+  wixVariables,
+  '<?define RTMProductVersion="0.0.1" ?>',
+  '<?define RTMProductVersion="0.0.0" ?>',
+  'MSI RTM 版本下放（规避 ICE61: RTM==ProductVersion）'
+);
+fs.writeFileSync(wixVariablesPath, wixVariables);
 
 // APP_DISPLAY_NAME 会被注入每一种本地化资源。只修改 Product 不足以覆盖
 // light.exe 的 -loc 输入；任一 .wxl 保留 1252/其他单字节代码页，都会在

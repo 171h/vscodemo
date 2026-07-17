@@ -236,7 +236,8 @@ patch_windows_msi_script() {
 
   node scripts/lib/patch-windows-msi.mjs \
     "$ROOT/vscodium/build/windows/msi/build.sh" \
-    "$ROOT/vscodium/build/windows/msi/vscodium.wxs"
+    "$ROOT/vscodium/build/windows/msi/vscodium.wxs" \
+    "$ROOT/vscodium/build/windows/msi/includes/vscodium-variables.wxi"
 }
 
 # 将 upstream.lock.json 锁定的 vscode tag/commit 写入 vscodium/upstream/stable.json
