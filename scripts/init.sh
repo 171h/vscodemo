@@ -23,10 +23,14 @@ VSCODIUM_REPO=$(node -p "require('./upstream.lock.json').vscodium.repo")
 echo "==> 锁定版本: vscode ${VSCODE_TAG} (${VSCODE_COMMIT}) / vscodium ${VSCODIUM_RELEASE}"
 
 # --- 1. VSCodium 子模块 -------------------------------------------------------
-# 检查 .gitmodules 是否已注册，而非检查文件系统（.gitmodules 可能在但文件未检出）
-if ! git config --file .gitmodules --get submodule.vscodium.path >/dev/null 2>&1; then
+# 判断子模块是否已注册，看的是 index 中的 160000 gitlink 条目——这是 git
+# 是否真正跟踪子模块的标志。注意：不能只查 .gitmodules，会存在「.gitmodules
+# 已登记但 gitlink 未入 index」的半成品态（历史 commit 漏了 git add）；
+# 那种情况下 git submodule update --init vscodium 会因 pathspec 不匹配而失败。
+if ! git ls-files --stage vscodium | grep -q '^160000'; then
   echo "==> 添加 vscodium 子模块..."
-  git submodule add "$VSCODIUM_REPO" vscodium
+  # --force：兼容 .gitmodules 已存在条目但 gitlink 缺失的情况，复用其 url
+  git submodule add --force "$VSCODIUM_REPO" vscodium
 fi
 git submodule update --init vscodium
 git -C vscodium fetch --tags origin
