@@ -1,5 +1,7 @@
-Ribbon Part 补丁：在 Banner 之后增加横跨 Workbench 的可折叠功能区，提供 File/View/Help 内置标签和扩展声明式 contributes.ribbon 标签、分组、命令按钮。
+Ribbon Part 补丁：在 Banner 之后增加横跨 Workbench 的可折叠功能区，提供 File/View/Help 内置标签、按原菜单分隔线同步的命名分组，以及扩展声明式 contributes.ribbon 标签、分组、命令按钮、Office 风格分割/单体下拉按钮与隔离的自定义菜单内容。
+按钮支持全高、半高和三分之一高尺寸，可在同一功能组中形成单行、两行和三行布局；紧凑按钮支持纯图标或左图标右标题样式。
 保留现有 ActivityBar 入口；Ribbon 支持状态记忆、键盘导航、折叠后的临时覆盖层和启动 Splash 尺寸恢复。
+宽度不足时先按按钮声明逐级切换为半高、三分之一高或纯图标布局，再将相近功能合并为下拉菜单，随后逐个折叠功能组；仍溢出时通过按边界显示的左右悬浮按钮滚动，且不显示横向滚动条。
 
 diff --git a/src/vs/code/electron-browser/workbench/workbench.ts b/src/vs/code/electron-browser/workbench/workbench.ts
 index 767fbe08db3c00b0d3da3e5c46843e87702b3ed6..bdc2f1954ce3cf5de71e97d553de40c289bf455f 100644
@@ -254,10 +256,10 @@ index 3480283a2177b0833bc5a497c746aa311b79a6f8..b02fbc4e7a82f2216d47392dd8bc1b57
  						data: middleSection,
 diff --git a/src/vs/workbench/browser/parts/ribbon/media/ribbonpart.css b/src/vs/workbench/browser/parts/ribbon/media/ribbonpart.css
 new file mode 100644
-index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a5579107146f
+index 0000000000000000000000000000000000000000..c4a91275e96609ad8a3ad868e98eea5d23a31dce
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/media/ribbonpart.css
-@@ -0,0 +1,154 @@
+@@ -0,0 +1,385 @@
 +.monaco-workbench .part.ribbon {
 +	background: var(--vscode-editor-background);
 +	color: var(--vscode-foreground);
@@ -282,7 +284,13 @@ index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a557
 +
 +.ribbon-tab,
 +.ribbon-collapse,
-+.ribbon-item {
++.ribbon-item,
++.ribbon-dropdown-item,
++.ribbon-dropdown-primary,
++.ribbon-dropdown-trigger,
++.ribbon-group-dropdown,
++.ribbon-menu-back,
++.ribbon-scroll-button {
 +	border: 0;
 +	color: inherit;
 +	background: transparent;
@@ -297,7 +305,13 @@ index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a557
 +
 +.ribbon-tab:hover,
 +.ribbon-item:hover:not(:disabled),
-+.ribbon-collapse:hover {
++.ribbon-dropdown-item:hover,
++.ribbon-dropdown-primary:hover:not(:disabled),
++.ribbon-dropdown-trigger:hover,
++.ribbon-collapse:hover,
++.ribbon-group-dropdown:hover,
++.ribbon-menu-back:hover,
++.ribbon-scroll-button:hover {
 +	background: var(--vscode-toolbar-hoverBackground);
 +}
 +
@@ -313,7 +327,13 @@ index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a557
 +
 +.ribbon-tab:focus-visible,
 +.ribbon-item:focus-visible,
-+.ribbon-collapse:focus-visible {
++.ribbon-dropdown-item:focus-visible,
++.ribbon-dropdown-primary:focus-visible,
++.ribbon-dropdown-trigger:focus-visible,
++.ribbon-collapse:focus-visible,
++.ribbon-group-dropdown:focus-visible,
++.ribbon-menu-back:focus-visible,
++.ribbon-scroll-button:focus-visible {
 +	outline: 1px solid var(--vscode-focusBorder);
 +	outline-offset: -1px;
 +}
@@ -326,13 +346,19 @@ index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a557
 +
 +.ribbon-content,
 +.ribbon-overlay {
-+	height: 72px;
++	position: relative;
++	height: 98px;
 +	box-sizing: border-box;
-+	overflow-x: auto;
-+	overflow-y: hidden;
++	overflow: hidden;
 +	background: var(--vscode-editor-background);
 +	color: var(--vscode-foreground);
 +	box-shadow: 0 4px 8px var(--vscode-widget-shadow);
++}
++
++.ribbon-scroll-viewport {
++	width: 100%;
++	height: 100%;
++	overflow: hidden;
 +}
 +
 +.ribbon-groups {
@@ -353,23 +379,102 @@ index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a557
 +	border-right: 1px solid var(--vscode-panel-border);
 +}
 +
-+.ribbon-items {
++.ribbon-group-dropdown {
++	display: none;
++	align-items: center;
++	justify-content: center;
++	gap: 4px;
++	height: 100%;
++	min-width: 72px;
++	max-width: 112px;
++	padding: 0 8px;
++	cursor: pointer;
++}
++
++.ribbon-group-dropdown-label {
++	overflow: hidden;
++	text-overflow: ellipsis;
++	white-space: nowrap;
++}
++
++.ribbon-group.folded .ribbon-items,
++.ribbon-group.folded .ribbon-group-title {
++	display: none;
++}
++
++.ribbon-group.folded .ribbon-group-dropdown {
 +	display: flex;
-+	align-items: stretch;
++}
++
++.ribbon-scroll-button {
++	position: absolute;
++	top: 0;
++	z-index: 1;
++	width: 32px;
++	height: 100%;
++	padding: 0;
++	font-size: 18px;
++	cursor: pointer;
++	background: var(--vscode-editor-background);
++	box-shadow: 0 0 8px var(--vscode-widget-shadow);
++}
++
++.ribbon-scroll-button.left {
++	left: 0;
++}
++
++.ribbon-scroll-button.right {
++	right: 0;
++}
++
++/* Six tracks let full, half, and third-height buttons share a group. */
++.ribbon-items {
++	display: grid;
++	grid-template-rows: repeat(6, minmax(0, 1fr));
++	grid-auto-flow: column;
++	grid-auto-columns: max-content;
 +	gap: 2px;
-+	height: 48px;
++	height: 74px;
 +}
 +
 +.ribbon-item {
 +	display: flex;
 +	align-items: center;
 +	justify-content: center;
-+	flex-direction: column;
-+	min-width: 62px;
-+	max-width: 118px;
++	min-width: 30px;
++	max-width: 150px;
 +	padding: 2px 6px;
 +	border-radius: 2px;
 +	cursor: pointer;
++}
++
++.ribbon-item-full {
++	grid-row: span 6;
++}
++
++.ribbon-item-half {
++	grid-row: span 3;
++}
++
++.ribbon-item-third {
++	grid-row: span 2;
++}
++
++.ribbon-item-vertical {
++	flex-direction: column;
++	min-width: 62px;
++	max-width: 118px;
++}
++
++.ribbon-item-horizontal {
++	flex-direction: row;
++	justify-content: flex-start;
++	gap: 5px;
++}
++
++.ribbon-item-icon-only {
++	padding-right: 4px;
++	padding-left: 4px;
 +}
 +
 +.ribbon-items.compact .ribbon-item {
@@ -383,12 +488,25 @@ index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a557
 +}
 +
 +.ribbon-item-icon {
-+	width: 20px;
-+	height: 20px;
++	flex: 0 0 auto;
++	width: 18px;
++	height: 18px;
 +	font-size: 18px;
 +	background-position: center;
 +	background-repeat: no-repeat;
 +	background-size: contain;
++}
++
++.ribbon-item-full .ribbon-item-icon {
++	width: 46px;
++	height: 46px;
++	font-size: 44px;
++}
++
++.ribbon-item-half .ribbon-item-icon {
++	width: 22px;
++	height: 22px;
++	font-size: 22px;
 +}
 +
 +.ribbon-item-label {
@@ -399,6 +517,121 @@ index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a557
 +	text-align: center;
 +	text-overflow: ellipsis;
 +	white-space: nowrap;
++}
++
++.ribbon-item-icon-only .ribbon-item-label {
++	display: none;
++}
++
++.ribbon-dropdown-item {
++	display: flex;
++	flex-direction: column;
++	min-width: 68px;
++	max-width: 128px;
++	padding: 0;
++	border-radius: 2px;
++	overflow: hidden;
++}
++
++.ribbon-dropdown-primary,
++.ribbon-dropdown-trigger,
++.ribbon-dropdown-single {
++	display: flex;
++	align-items: center;
++	justify-content: center;
++	width: 100%;
++	padding: 0 6px;
++	cursor: pointer;
++}
++
++.ribbon-dropdown-primary,
++.ribbon-dropdown-single {
++	flex: 1;
++	flex-direction: column;
++}
++
++.ribbon-dropdown-primary .ribbon-item-icon,
++.ribbon-dropdown-single > .ribbon-item-icon {
++	width: 42px;
++	height: 42px;
++	font-size: 40px;
++}
++
++.ribbon-dropdown-primary:disabled {
++	opacity: .45;
++	cursor: default;
++}
++
++.ribbon-dropdown-trigger,
++.ribbon-dropdown-footer {
++	display: flex;
++	align-items: center;
++	justify-content: center;
++	gap: 3px;
++	min-height: 22px;
++}
++
++.ribbon-dropdown-trigger {
++	border-top: 1px solid var(--vscode-panel-border);
++}
++
++.ribbon-dropdown-footer .codicon,
++.ribbon-dropdown-trigger .codicon {
++	font-size: 12px;
++}
++
++.ribbon-item-menu {
++	max-width: min(1200px, calc(100vw - 24px));
++	max-height: min(800px, calc(100vh - 24px));
++	overflow: auto;
++	background: var(--vscode-menu-background);
++	color: var(--vscode-menu-foreground);
++	border: 1px solid var(--vscode-menu-border, var(--vscode-panel-border));
++	box-shadow: 0 4px 10px var(--vscode-widget-shadow);
++}
++
++.ribbon-menu-back {
++	display: flex;
++	align-items: center;
++	gap: 6px;
++	width: 100%;
++	min-height: 30px;
++	padding: 4px 8px;
++	cursor: pointer;
++	border-bottom: 1px solid var(--vscode-menu-separatorBackground);
++}
++
++.ribbon-menu-items {
++	display: flex;
++	flex-direction: column;
++	gap: 2px;
++	padding: 4px;
++}
++
++.ribbon-menu-items > .ribbon-item {
++	min-height: 32px;
++	max-width: none;
++	justify-content: flex-start;
++	flex-direction: row;
++	gap: 6px;
++}
++
++.ribbon-menu-items > .ribbon-item .ribbon-item-icon {
++	width: 22px;
++	height: 22px;
++	font-size: 22px;
++}
++
++.ribbon-menu-items > .ribbon-dropdown-item {
++	min-width: 180px;
++	min-height: 74px;
++}
++
++.ribbon-custom-content {
++	display: block;
++	max-width: 100%;
++	border: 0;
++	background: transparent;
 +}
 +
 +.ribbon-group-title {
@@ -414,10 +647,10 @@ index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a557
 +}
 diff --git a/src/vs/workbench/browser/parts/ribbon/ribbonExtensionPoint.ts b/src/vs/workbench/browser/parts/ribbon/ribbonExtensionPoint.ts
 new file mode 100644
-index 0000000000000000000000000000000000000000..0fc45fc6eeca9fb12f5281df2d1a63f00aa5403c
+index 0000000000000000000000000000000000000000..4bfd0e2efdcee3c23d28bf2ef620ecf87766d6d5
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/ribbonExtensionPoint.ts
-@@ -0,0 +1,218 @@
+@@ -0,0 +1,315 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -435,10 +668,43 @@ index 0000000000000000000000000000000000000000..0fc45fc6eeca9fb12f5281df2d1a63f0
 +	readonly dark: string;
 +}
 +
-+export interface IRibbonItemContribution {
-+	readonly command: string;
++export type RibbonItemSize = 'full' | 'half' | 'third';
++export type RibbonItemStyle = 'icon' | 'iconAndLabel';
++export type RibbonItemType = 'button' | 'splitButton' | 'dropdown';
++
++export interface IRibbonResponsiveLayoutContribution {
++	readonly size: RibbonItemSize;
++	readonly style?: RibbonItemStyle;
++}
++
++export interface IRibbonResponsiveMenuContribution {
++	readonly id: string;
 +	readonly title: string;
 +	readonly icon: string | IRibbonIconPath;
++}
++
++export interface IRibbonCustomContentContribution {
++	readonly html: string;
++	readonly css?: string;
++	readonly width?: number;
++	readonly height?: number;
++}
++
++export interface IRibbonMenuContribution {
++	readonly items?: readonly IRibbonItemContribution[];
++	readonly custom?: IRibbonCustomContentContribution;
++}
++
++export interface IRibbonItemContribution {
++	readonly type?: RibbonItemType;
++	readonly command?: string;
++	readonly title: string;
++	readonly icon: string | IRibbonIconPath;
++	readonly menu?: IRibbonMenuContribution;
++	readonly size?: RibbonItemSize;
++	readonly style?: RibbonItemStyle;
++	readonly responsive?: readonly IRibbonResponsiveLayoutContribution[];
++	readonly responsiveMenu?: IRibbonResponsiveMenuContribution;
 +	readonly order?: number;
 +	readonly when?: string;
 +	readonly arguments?: readonly unknown[];
@@ -514,11 +780,29 @@ index 0000000000000000000000000000000000000000..0fc45fc6eeca9fb12f5281df2d1a63f0
 +	description: localize('ribbon.when', "Condition which must be true to show this Ribbon element."),
 +};
 +
++const ribbonCustomContentSchema: IJSONSchema = {
++	type: 'object',
++	additionalProperties: false,
++	required: ['html'],
++	properties: {
++		html: { type: 'string', description: localize('ribbon.customHtml', "HTML rendered inside an isolated Ribbon menu frame.") },
++		css: { type: 'string', description: localize('ribbon.customCss', "CSS applied only inside the isolated Ribbon menu frame.") },
++		width: { type: 'number', minimum: 160, maximum: 1200, default: 360 },
++		height: { type: 'number', minimum: 80, maximum: 800, default: 280 },
++	},
++};
++
 +const ribbonItemSchema: IJSONSchema = {
 +	type: 'object',
 +	additionalProperties: false,
-+	required: ['command', 'title', 'icon'],
++	required: ['title', 'icon'],
++	oneOf: [
++		{ required: ['command'], not: { required: ['menu'] }, properties: { type: { enum: ['button'] } } },
++		{ required: ['type', 'command', 'menu'], properties: { type: { enum: ['splitButton'] } } },
++		{ required: ['type', 'menu'], not: { required: ['command'] }, properties: { type: { enum: ['dropdown'] } } },
++	],
 +	properties: {
++		type: { type: 'string', enum: ['button', 'splitButton', 'dropdown'], default: 'button', description: localize('ribbon.itemType', "A command button, an Office-style split button, or a menu-only dropdown button.") },
 +		command: { type: 'string', description: localize('ribbon.command', "Identifier of a command declared in the commands contribution point.") },
 +		title: { type: 'string', description: localize('ribbon.itemTitle', "Human readable label of the Ribbon command.") },
 +		icon: {
@@ -529,8 +813,48 @@ index 0000000000000000000000000000000000000000..0fc45fc6eeca9fb12f5281df2d1a63f0
 +			],
 +		},
 +		order: orderProperty,
++		size: { type: 'string', enum: ['full', 'half', 'third'], default: 'full', description: localize('ribbon.itemSize', "Button height relative to the Ribbon content: full, half, or third.") },
++		style: { type: 'string', enum: ['icon', 'iconAndLabel'], default: 'iconAndLabel', description: localize('ribbon.itemStyle', "Compact button content: icon only, or an icon followed by its label. Full-height buttons always place the icon above the label.") },
++		responsive: {
++			type: 'array',
++			items: {
++				type: 'object',
++				additionalProperties: false,
++				required: ['size'],
++				properties: {
++					size: { type: 'string', enum: ['full', 'half', 'third'] },
++					style: { type: 'string', enum: ['icon', 'iconAndLabel'], default: 'iconAndLabel' },
++				},
++			},
++			description: localize('ribbon.itemResponsive', "Ordered compact layouts used when the Ribbon does not have enough width."),
++		},
++		responsiveMenu: {
++			type: 'object',
++			additionalProperties: false,
++			required: ['id', 'title', 'icon'],
++			properties: {
++				id: { type: 'string' },
++				title: { type: 'string' },
++				icon: {
++					anyOf: [
++						{ type: 'string' },
++						{ type: 'object', required: ['light', 'dark'], additionalProperties: false, properties: { light: { type: 'string' }, dark: { type: 'string' } } },
++					],
++				},
++			},
++			description: localize('ribbon.itemResponsiveMenu', "Combines items with the same id into this dropdown when compact layouts are not enough."),
++		},
 +		when: whenProperty,
 +		arguments: { type: 'array', description: localize('ribbon.arguments', "Arguments passed to the command."), items: {} },
++		menu: {
++			type: 'object',
++			additionalProperties: false,
++			minProperties: 1,
++			properties: {
++				items: { type: 'array', minItems: 1, items: { $ref: '#/definitions/ribbonItem' } },
++				custom: ribbonCustomContentSchema,
++			},
++		},
 +	},
 +};
 +
@@ -552,6 +876,7 @@ index 0000000000000000000000000000000000000000..0fc45fc6eeca9fb12f5281df2d1a63f0
 +	type: 'object',
 +	additionalProperties: false,
 +	required: ['tabs'],
++	definitions: { ribbonItem: ribbonItemSchema },
 +	properties: {
 +		tabs: {
 +			type: 'array',
@@ -581,6 +906,11 @@ index 0000000000000000000000000000000000000000..0fc45fc6eeca9fb12f5281df2d1a63f0
 +
 +function orderOf(value: { readonly order?: number }): number {
 +	return typeof value.order === 'number' ? value.order : 0;
++}
++
++function sortItems(items: readonly IRibbonItemContribution[]): IRibbonItemContribution[] {
++	return items.map(item => item.menu?.items ? { ...item, menu: { ...item.menu, items: sortItems(item.menu.items) } } : item)
++		.sort((a, b) => orderOf(a) - orderOf(b) || (a.command ?? a.title).localeCompare(b.command ?? b.title));
 +}
 +
 +ribbonExtensionPoint.setHandler((extensions) => {
@@ -620,7 +950,7 @@ index 0000000000000000000000000000000000000000..0fc45fc6eeca9fb12f5281df2d1a63f0
 +				}
 +				groupIds.add(group.id);
 +				return true;
-+			}).map((group: IRibbonGroupContribution) => ({ ...group, items: [...group.items].sort((a: IRibbonItemContribution, b: IRibbonItemContribution) => orderOf(a) - orderOf(b) || a.command.localeCompare(b.command)) }))
++			}).map((group: IRibbonGroupContribution) => ({ ...group, items: sortItems(group.items) }))
 +				.sort((a: IRibbonGroupContribution, b: IRibbonGroupContribution) => orderOf(a) - orderOf(b) || a.id.localeCompare(b.id));
 +
 +			tabIds.add(tab.id);
@@ -638,10 +968,10 @@ index 0000000000000000000000000000000000000000..0fc45fc6eeca9fb12f5281df2d1a63f0
 +});
 diff --git a/src/vs/workbench/browser/parts/ribbon/ribbonPart.ts b/src/vs/workbench/browser/parts/ribbon/ribbonPart.ts
 new file mode 100644
-index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f53279a98c1e4
+index 0000000000000000000000000000000000000000..81298f744b982cdd64078743a54f6fb1251fc864
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/ribbonPart.ts
-@@ -0,0 +1,497 @@
+@@ -0,0 +1,846 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -669,10 +999,10 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +import { IThemeService } from '../../../../platform/theme/common/themeService.js';
 +import { Part } from '../../part.js';
 +import { IWorkbenchLayoutService, Parts } from '../../../services/layout/browser/layoutService.js';
-+import { IRegisteredRibbonTab, IRibbonGroupContribution, IRibbonItemContribution, RibbonBuiltinTabId, ribbonRegistry } from './ribbonExtensionPoint.js';
++import { IRegisteredRibbonTab, IRibbonCustomContentContribution, IRibbonGroupContribution, IRibbonItemContribution, IRibbonMenuContribution, IRibbonResponsiveLayoutContribution, IRibbonResponsiveMenuContribution, RibbonBuiltinTabId, RibbonItemSize, RibbonItemStyle, ribbonRegistry } from './ribbonExtensionPoint.js';
 +import { IRibbonService } from './ribbonService.js';
 +
-+const EXPANDED_HEIGHT = 104;
++const EXPANDED_HEIGHT = 130;
 +const COLLAPSED_HEIGHT = 32;
 +const STORAGE_COLLAPSED = 'workbench.ribbon.collapsed';
 +const STORAGE_ACTIVE_TAB = 'workbench.ribbon.activeTab';
@@ -698,6 +1028,35 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +
 +function orderOf(tab: RibbonTab): number {
 +	return tab.order ?? 0;
++}
++
++function builtinGroupTitle(tab: IBuiltinRibbonTab, groupId: string, actions: readonly IAction[]): string {
++	switch (`${tab.id}/${groupId}`) {
++		case `${RibbonBuiltinTabId.File}/1_new`: return localize('ribbon.group.file.new', "New");
++		case `${RibbonBuiltinTabId.File}/2_open`: return localize('ribbon.group.file.open', "Open");
++		case `${RibbonBuiltinTabId.File}/3_workspace`: return localize('ribbon.group.file.workspace', "Workspace");
++		case `${RibbonBuiltinTabId.File}/4_save`: return localize('ribbon.group.file.save', "Save");
++		case `${RibbonBuiltinTabId.File}/45_share`: return localize('ribbon.group.file.share', "Share");
++		case `${RibbonBuiltinTabId.File}/5_autosave`: return localize('ribbon.group.file.preferences', "Preferences");
++		case `${RibbonBuiltinTabId.File}/6_close`: return localize('ribbon.group.file.close', "Close");
++		case `${RibbonBuiltinTabId.File}/z_ConfirmClose`: return localize('ribbon.group.file.confirmClose', "Close Confirmation");
++		case `${RibbonBuiltinTabId.File}/z_Exit`: return localize('ribbon.group.file.exit', "Exit");
++		case `${RibbonBuiltinTabId.View}/1_open`: return localize('ribbon.group.view.open', "Open");
++		case `${RibbonBuiltinTabId.View}/2_appearance`: return localize('ribbon.group.view.appearance', "Appearance");
++		case `${RibbonBuiltinTabId.View}/3_sidebar`: return localize('ribbon.group.view.sidebar', "Primary Side Bar");
++		case `${RibbonBuiltinTabId.View}/4_auxbar`: return localize('ribbon.group.view.auxiliaryBar', "Secondary Side Bar");
++		case `${RibbonBuiltinTabId.View}/5_panel`: return localize('ribbon.group.view.panel', "Panel");
++		case `${RibbonBuiltinTabId.View}/5_copilot`: return localize('ribbon.group.view.copilot', "Copilot");
++		case `${RibbonBuiltinTabId.View}/6_editor`: return localize('ribbon.group.view.editor', "Editor");
++		case `${RibbonBuiltinTabId.Help}/1_welcome`: return localize('ribbon.group.help.getStarted', "Get Started");
++		case `${RibbonBuiltinTabId.Help}/2_reference`: return localize('ribbon.group.help.reference', "Documentation");
++		case `${RibbonBuiltinTabId.Help}/3_feedback`: return localize('ribbon.group.help.feedback', "Feedback");
++		case `${RibbonBuiltinTabId.Help}/4_legal`: return localize('ribbon.group.help.legal', "Legal");
++		case `${RibbonBuiltinTabId.Help}/5_tools`: return localize('ribbon.group.help.tools', "Tools");
++		case `${RibbonBuiltinTabId.Help}/z_about`: return localize('ribbon.group.help.about', "About");
++	}
++
++	return mnemonicButtonLabel(actions[0]?.label ?? tab.title, true);
 +}
 +
 +function builtinActionFallbackIcon(tab: IBuiltinRibbonTab, action: IAction): ThemeIcon {
@@ -823,10 +1182,19 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +			this.addContextKeys(ContextKeyExpr.deserialize(tab.when));
 +			for (const group of tab.groups) {
 +				this.addContextKeys(ContextKeyExpr.deserialize(group.when));
-+				for (const item of group.items) {
++				this.visitContributionItems(group.items, item => {
 +					this.addContextKeys(ContextKeyExpr.deserialize(item.when));
-+					this.addContextKeys(MenuRegistry.getCommand(item.command)?.precondition);
-+				}
++					this.addContextKeys(item.command ? MenuRegistry.getCommand(item.command)?.precondition : undefined);
++				});
++			}
++		}
++	}
++
++	private visitContributionItems(items: readonly IRibbonItemContribution[], visitor: (item: IRibbonItemContribution) => void): void {
++		for (const item of items) {
++			visitor(item);
++			if (item.menu?.items) {
++				this.visitContributionItems(item.menu.items, visitor);
 +			}
 +		}
 +	}
@@ -976,7 +1344,9 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +	private renderTabContent(tab: RibbonTab, container: HTMLElement, closeAfterRun: boolean, store: DisposableStore = this.contentDisposables): HTMLButtonElement | undefined {
 +		clearNode(container);
 +		container.setAttribute('aria-label', tab.title);
-+		const groups = append(container, $('.ribbon-groups'));
++		const viewport = append(container, $('.ribbon-scroll-viewport'));
++		const groups = append(viewport, $('.ribbon-groups'));
++		const collapsibleGroups: HTMLElement[] = [];
 +
 +		if (isBuiltinTab(tab)) {
 +			const menu = store.add(this.menuService.createMenu(tab.menuId, this.contextKeyService, { emitEventsForSubmenuChanges: true }));
@@ -989,26 +1359,44 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +					this.renderActiveContent(tab);
 +				}
 +			}));
-+			const actions = menu.getActions().flatMap(([, groupActions]) => groupActions);
-+			return this.renderActionGroup(groups, tab, actions, closeAfterRun, store);
++			let firstFocusableButton: HTMLButtonElement | undefined;
++			for (const [groupId, actions] of menu.getActions()) {
++				const candidate = this.renderActionGroup(groups, tab, groupId, actions, closeAfterRun, store, collapsibleGroups);
++				firstFocusableButton ??= candidate;
++			}
++			this.installResponsiveOverflow(container, viewport, groups, collapsibleGroups, store);
++			return firstFocusableButton;
 +		}
 +
 +		let firstFocusableButton: HTMLButtonElement | undefined;
 +		for (const group of tab.groups.filter(group => this.matches(group.when))) {
-+			firstFocusableButton ??= this.renderContributionGroup(groups, tab, group, closeAfterRun, store);
++			const candidate = this.renderContributionGroup(groups, tab, group, closeAfterRun, store, collapsibleGroups);
++			firstFocusableButton ??= candidate;
 +		}
++		this.installResponsiveOverflow(container, viewport, groups, collapsibleGroups, store);
 +		return firstFocusableButton;
 +	}
 +
-+	private renderActionGroup(parent: HTMLElement, tab: IBuiltinRibbonTab, actions: readonly IAction[], closeAfterRun: boolean, store: DisposableStore): HTMLButtonElement | undefined {
++	private renderActionGroup(parent: HTMLElement, tab: IBuiltinRibbonTab, groupId: string, actions: readonly IAction[], closeAfterRun: boolean, store: DisposableStore, collapsibleGroups: HTMLElement[]): HTMLButtonElement | undefined {
++		const title = builtinGroupTitle(tab, groupId, actions);
 +		const group = append(parent, $('.ribbon-group'));
 +		group.setAttribute('role', 'group');
-+		group.setAttribute('aria-label', tab.title);
++		group.setAttribute('aria-label', title);
++		group.dataset.groupId = groupId;
++		collapsibleGroups.push(group);
 +		const items = append(group, $('.ribbon-items.compact'));
++		this.renderGroupDropdown(group, title, actions, store);
 +		let firstFocusableButton: HTMLButtonElement | undefined;
 +		for (const action of actions) {
 +			const label = mnemonicButtonLabel(action.label, true);
-+			const { button, icon } = this.createButton(items, label, action.class, action.enabled);
++			const size: RibbonItemSize = actions.length === 1 ? 'full' : actions.length === 2 ? 'half' : 'third';
++			const compactLayouts: IRibbonResponsiveLayoutContribution[] = size === 'full'
++				? [{ size: 'half' }, { size: 'third' }]
++				: size === 'half' ? [{ size: 'third' }] : [];
++			if (this.supportsIconOnlyLayout(action.id)) {
++				compactLayouts.push({ size: 'third', style: 'icon' });
++			}
++			const { button, icon } = this.createButton(items, label, action.class, action.enabled, size, 'iconAndLabel', compactLayouts);
 +			this.renderBuiltinActionIcon(icon, tab, action);
 +			if (!button.disabled) {
 +				firstFocusableButton ??= button;
@@ -1024,8 +1412,13 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +				}
 +			}));
 +		}
-+		append(group, $('div.ribbon-group-title')).textContent = tab.title;
++		append(group, $('div.ribbon-group-title')).textContent = title;
 +		return firstFocusableButton;
++	}
++
++	private supportsIconOnlyLayout(commandId: string): boolean {
++		return /(?:^|\.)(?:save|saveAll|print|undo|redo|find|search)$/i.test(commandId)
++			|| /(?:save|print|undo|redo|find|search)/i.test(commandId);
 +	}
 +
 +	private renderBuiltinActionIcon(container: HTMLElement, tab: IBuiltinRibbonTab, action: IAction): void {
@@ -1056,26 +1449,228 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +		container.classList.add(...ThemeIcon.asClassNameArray(builtinActionFallbackIcon(tab, action)));
 +	}
 +
-+	private renderContributionGroup(parent: HTMLElement, tab: IRegisteredRibbonTab, contribution: IRibbonGroupContribution, closeAfterRun: boolean, store: DisposableStore): HTMLButtonElement | undefined {
++	private renderContributionGroup(parent: HTMLElement, tab: IRegisteredRibbonTab, contribution: IRibbonGroupContribution, closeAfterRun: boolean, store: DisposableStore, collapsibleGroups: HTMLElement[]): HTMLButtonElement | undefined {
 +		const group = append(parent, $('.ribbon-group'));
 +		group.setAttribute('role', 'group');
 +		group.setAttribute('aria-label', contribution.title);
++		collapsibleGroups.push(group);
 +		const items = append(group, $('.ribbon-items'));
++		this.renderContributionGroupDropdown(group, tab, contribution, store);
++		const responsiveMenus = new Map<string, { definition: IRibbonResponsiveMenuContribution; items: IRibbonItemContribution[] }>();
 +		let firstFocusableButton: HTMLButtonElement | undefined;
 +		for (const item of contribution.items.filter(item => this.matches(item.when))) {
 +			const button = this.renderContributionItem(items, tab, item, closeAfterRun, store);
++			if (item.responsiveMenu) {
++				(items.lastElementChild as HTMLElement).dataset.responsiveMenuSource = item.responsiveMenu.id;
++				const menu = responsiveMenus.get(item.responsiveMenu.id) ?? { definition: item.responsiveMenu, items: [] };
++				menu.items.push(item);
++				responsiveMenus.set(item.responsiveMenu.id, menu);
++			}
 +			if (!button.disabled) {
 +				firstFocusableButton ??= button;
 +			}
++		}
++		for (const [id, menu] of responsiveMenus) {
++			this.renderContributionItem(items, tab, {
++				type: 'dropdown',
++				title: menu.definition.title,
++				icon: menu.definition.icon,
++				menu: { items: menu.items },
++			}, closeAfterRun, store);
++			const element = items.lastElementChild as HTMLElement;
++			element.classList.add('ribbon-responsive-menu');
++			element.dataset.responsiveMenuId = id;
++			element.hidden = true;
 +		}
 +		append(group, $('div.ribbon-group-title')).textContent = contribution.title;
 +		return firstFocusableButton;
 +	}
 +
-+	private renderContributionItem(parent: HTMLElement, tab: IRegisteredRibbonTab, item: IRibbonItemContribution, closeAfterRun: boolean, store: DisposableStore): HTMLButtonElement {
-+		const command = MenuRegistry.getCommand(item.command);
-+		const enabled = !command?.precondition || this.contextKeyService.contextMatchesRules(command.precondition);
-+		const { button, icon } = this.createButton(parent, item.title, undefined, enabled);
++	private renderContributionGroupDropdown(parent: HTMLElement, tab: IRegisteredRibbonTab, contribution: IRibbonGroupContribution, store: DisposableStore): void {
++		const button = append(parent, $('button.ribbon-group-dropdown'));
++		button.type = 'button';
++		button.setAttribute('aria-label', localize('ribbon.openGroup', "Open {0} menu", contribution.title));
++		append(button, $('span.ribbon-group-dropdown-label')).textContent = contribution.title;
++		append(button, $('.codicon.codicon-chevron-down'));
++		store.add(addDisposableListener(button, EventType.CLICK, () => {
++			this.showContributionMenu(button, tab, { items: contribution.items });
++		}));
++	}
++
++	private renderGroupDropdown(parent: HTMLElement, title: string, actions: readonly IAction[], store: DisposableStore): void {
++		const button = append(parent, $('button.ribbon-group-dropdown'));
++		button.type = 'button';
++		button.setAttribute('aria-label', localize('ribbon.openGroup', "Open {0} menu", title));
++		append(button, $('span.ribbon-group-dropdown-label')).textContent = title;
++		append(button, $('.codicon.codicon-chevron-down'));
++		store.add(addDisposableListener(button, EventType.CLICK, () => {
++			this.contextMenuService.showContextMenu({ getAnchor: () => button, getActions: () => [...actions] });
++		}));
++	}
++
++	private installResponsiveOverflow(container: HTMLElement, viewport: HTMLElement, groups: HTMLElement, collapsibleGroups: readonly HTMLElement[], store: DisposableStore): void {
++		const left = append(container, $('button.ribbon-scroll-button.left.codicon.codicon-chevron-left'));
++		const right = append(container, $('button.ribbon-scroll-button.right.codicon.codicon-chevron-right'));
++		left.type = right.type = 'button';
++		left.setAttribute('aria-label', localize('ribbon.scrollLeft', "Scroll Ribbon left"));
++		right.setAttribute('aria-label', localize('ribbon.scrollRight', "Scroll Ribbon right"));
++		left.hidden = right.hidden = true;
++
++		const updateScrollButtons = () => {
++			const maximum = Math.max(0, groups.scrollWidth - viewport.clientWidth);
++			left.hidden = maximum === 0 || viewport.scrollLeft <= 1;
++			right.hidden = maximum === 0 || viewport.scrollLeft >= maximum - 1;
++		};
++		const responsiveButtons = Array.from(groups.querySelectorAll<HTMLButtonElement>('.ribbon-item[data-responsive-layouts]'));
++		const responsiveMenus = Array.from(groups.querySelectorAll<HTMLElement>('.ribbon-responsive-menu'));
++		const responsiveMenuSources = Array.from(groups.querySelectorAll<HTMLElement>('[data-responsive-menu-source]'));
++		const fit = () => {
++			for (const group of collapsibleGroups) {
++				group.classList.remove('folded');
++			}
++			for (const button of responsiveButtons) {
++				this.applyButtonLayout(button, button.dataset.ribbonSize as RibbonItemSize, button.dataset.ribbonStyle as RibbonItemStyle);
++				button.dataset.responsiveIndex = '-1';
++			}
++			for (const source of responsiveMenuSources) {
++				source.hidden = false;
++			}
++			for (const menu of responsiveMenus) {
++				menu.hidden = true;
++			}
++			viewport.scrollLeft = 0;
++
++			let changed = true;
++			while (groups.scrollWidth > viewport.clientWidth && changed) {
++				changed = false;
++				for (const button of responsiveButtons) {
++					const layouts = JSON.parse(button.dataset.responsiveLayouts ?? '[]') as IRibbonResponsiveLayoutContribution[];
++					const next = Number(button.dataset.responsiveIndex ?? '-1') + 1;
++					const layout = layouts[next];
++					if (!layout) {
++						continue;
++					}
++					this.applyButtonLayout(button, layout.size, layout.style);
++					button.dataset.responsiveIndex = String(next);
++					changed = true;
++					if (groups.scrollWidth <= viewport.clientWidth) {
++						break;
++					}
++				}
++			}
++
++			for (const menu of responsiveMenus) {
++				if (groups.scrollWidth <= viewport.clientWidth) {
++					break;
++				}
++				for (const source of responsiveMenuSources) {
++					if (source.dataset.responsiveMenuSource === menu.dataset.responsiveMenuId) {
++						source.hidden = true;
++					}
++				}
++				menu.hidden = false;
++			}
++
++			for (let index = collapsibleGroups.length - 1; groups.scrollWidth > viewport.clientWidth && index >= 0; index--) {
++				collapsibleGroups[index].classList.add('folded');
++			}
++			updateScrollButtons();
++		};
++		const scroll = (direction: -1 | 1) => {
++			viewport.scrollLeft += direction * Math.max(80, Math.floor(viewport.clientWidth * 0.8));
++			updateScrollButtons();
++		};
++
++		store.add(addDisposableListener(left, EventType.CLICK, () => scroll(-1)));
++		store.add(addDisposableListener(right, EventType.CLICK, () => scroll(1)));
++		store.add(addDisposableListener(viewport, EventType.SCROLL, updateScrollButtons));
++		store.add(addDisposableListener(getWindow(container), EventType.RESIZE, fit));
++		const ResizeObserverCtor = getWindow(container).ResizeObserver;
++		if (ResizeObserverCtor) {
++			const observer = new ResizeObserverCtor(fit);
++			observer.observe(container);
++			store.add({ dispose: () => observer.disconnect() });
++		}
++		fit();
++	}
++
++	private renderContributionItem(parent: HTMLElement, tab: IRegisteredRibbonTab, item: IRibbonItemContribution, closeAfterRun: boolean, store: DisposableStore, openNestedMenu?: (menu: IRibbonMenuContribution) => void): HTMLButtonElement {
++		const type = item.type ?? 'button';
++		const enabled = this.isContributionCommandEnabled(item.command);
++		const openMenu = (anchor: HTMLElement) => {
++			if (!item.menu) {
++				return;
++			}
++			if (openNestedMenu) {
++				openNestedMenu(item.menu);
++			} else {
++				this.showContributionMenu(anchor, tab, item.menu);
++			}
++		};
++
++		if (type === 'button') {
++			const { button, icon } = this.createButton(parent, item.title, undefined, enabled, item.size, item.style, item.responsive);
++			this.renderContributionIcon(icon, tab, item);
++			store.add(addDisposableListener(button, EventType.CLICK, () => this.runContributionCommand(item, closeAfterRun)));
++			return button;
++		}
++
++		if (type === 'splitButton') {
++			const split = append(parent, $('.ribbon-dropdown-item.ribbon-item-full'));
++			split.setAttribute('role', 'group');
++			split.setAttribute('aria-label', item.title);
++			const primary = append(split, $<HTMLButtonElement>('button.ribbon-dropdown-primary'));
++			primary.type = 'button';
++			primary.disabled = !enabled;
++			primary.setAttribute('aria-label', localize('ribbon.runCommand', "Run {0}", item.title));
++			this.renderContributionIcon(append(primary, $('.ribbon-item-icon')), tab, item);
++			const trigger = this.createDropdownTrigger(split, item.title);
++			store.add(addDisposableListener(primary, EventType.CLICK, () => this.runContributionCommand(item, closeAfterRun)));
++			store.add(addDisposableListener(trigger, EventType.CLICK, () => openMenu(trigger)));
++			return enabled ? primary : trigger;
++		}
++
++		const button = append(parent, $<HTMLButtonElement>('button.ribbon-dropdown-item.ribbon-item-full.ribbon-dropdown-single'));
++		button.type = 'button';
++		button.setAttribute('aria-label', localize('ribbon.openItemMenu', "Open {0} menu", item.title));
++		button.setAttribute('aria-haspopup', 'dialog');
++		this.renderContributionIcon(append(button, $('.ribbon-item-icon')), tab, item);
++		const footer = append(button, $('.ribbon-dropdown-footer'));
++		append(footer, $('span.ribbon-item-label')).textContent = item.title;
++		append(footer, $('.codicon.codicon-chevron-down'));
++		store.add(addDisposableListener(button, EventType.CLICK, () => openMenu(button)));
++		return button;
++	}
++
++	private createDropdownTrigger(parent: HTMLElement, title: string): HTMLButtonElement {
++		const trigger = append(parent, $<HTMLButtonElement>('button.ribbon-dropdown-trigger'));
++		trigger.type = 'button';
++		trigger.setAttribute('aria-label', localize('ribbon.openItemMenu', "Open {0} menu", title));
++		trigger.setAttribute('aria-haspopup', 'dialog');
++		append(trigger, $('span.ribbon-item-label')).textContent = title;
++		append(trigger, $('.codicon.codicon-chevron-down'));
++		return trigger;
++	}
++
++	private isContributionCommandEnabled(commandId: string | undefined): boolean {
++		if (!commandId) {
++			return false;
++		}
++		const command = MenuRegistry.getCommand(commandId);
++		return !command?.precondition || this.contextKeyService.contextMatchesRules(command.precondition);
++	}
++
++	private runContributionCommand(item: IRibbonItemContribution, closeAfterRun: boolean): void {
++		if (!item.command) {
++			return;
++		}
++		void this.commandService.executeCommand(item.command, ...(item.arguments ?? [])).catch(error => this.notificationService.error(error));
++		if (closeAfterRun) {
++			this.contextViewService.hideContextView();
++		}
++	}
++
++	private renderContributionIcon(icon: HTMLElement, tab: IRegisteredRibbonTab, item: IRibbonItemContribution): void {
 +		const iconValue = typeof item.icon === 'string' ? item.icon : isDark(this.themeService.getColorTheme().type) ? item.icon.dark : item.icon.light;
 +		const themeIcon = ThemeIcon.fromString(iconValue);
 +		if (themeIcon) {
@@ -1084,26 +1679,110 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +			icon.style.backgroundImage = asCSSUrl(resources.joinPath(tab.extensionLocation, iconValue));
 +			icon.classList.add('ribbon-file-icon');
 +		}
-+		store.add(addDisposableListener(button, EventType.CLICK, () => {
-+			void this.commandService.executeCommand(item.command, ...(item.arguments ?? [])).catch(error => this.notificationService.error(error));
-+			if (closeAfterRun) {
-+				this.contextViewService.hideContextView();
-+			}
-+		}));
-+		return button;
 +	}
 +
-+	private createButton(parent: HTMLElement, label: string, iconClass: string | undefined, enabled: boolean): { button: HTMLButtonElement; icon: HTMLElement } {
++	private showContributionMenu(anchor: HTMLElement, tab: IRegisteredRibbonTab, menu: IRibbonMenuContribution | undefined): void {
++		if (!menu) {
++			return;
++		}
++		let firstFocusableElement: HTMLElement | undefined;
++		const menuStack: IRibbonMenuContribution[] = [menu];
++		this.contextViewService.showContextView({
++			getAnchor: () => anchor,
++			render: container => {
++				container.classList.add('ribbon-item-menu');
++				const menuStore = new DisposableStore();
++				const contentStore = menuStore.add(new DisposableStore());
++				const renderCurrentMenu = (focus: boolean) => {
++					contentStore.clear();
++					clearNode(container);
++					firstFocusableElement = undefined;
++
++					if (menuStack.length > 1) {
++						const backButton = append(container, $<HTMLButtonElement>('button.ribbon-menu-back'));
++						backButton.type = 'button';
++						backButton.setAttribute('aria-label', localize('ribbon.menuBack', "Back to previous Ribbon menu"));
++						append(backButton, $('.codicon.codicon-arrow-left'));
++						append(backButton, $('span')).textContent = localize('ribbon.menuBackLabel', "Back");
++						contentStore.add(addDisposableListener(backButton, EventType.CLICK, () => {
++							menuStack.pop();
++							renderCurrentMenu(true);
++						}));
++						firstFocusableElement = backButton;
++					}
++
++					const currentMenu = menuStack[menuStack.length - 1];
++					if (currentMenu.items?.length) {
++						const items = append(container, $('.ribbon-menu-items'));
++						for (const item of currentMenu.items.filter(candidate => this.matches(candidate.when))) {
++							const button = this.renderContributionItem(items, tab, item, true, contentStore, nestedMenu => {
++								menuStack.push(nestedMenu);
++								renderCurrentMenu(true);
++							});
++							if (!button.disabled) {
++								firstFocusableElement ??= button;
++							}
++						}
++					}
++					if (currentMenu.custom) {
++						firstFocusableElement ??= this.renderCustomMenuContent(container, currentMenu.custom);
++					}
++					if (focus) {
++						firstFocusableElement?.focus();
++					}
++				};
++				renderCurrentMenu(false);
++				return menuStore;
++			},
++			focus: () => firstFocusableElement?.focus(),
++		});
++	}
++
++	private renderCustomMenuContent(parent: HTMLElement, content: IRibbonCustomContentContribution): HTMLIFrameElement {
++		const frame = append(parent, $<HTMLIFrameElement>('iframe.ribbon-custom-content'));
++		frame.title = localize('ribbon.customContent', "Custom Ribbon menu content");
++		frame.setAttribute('sandbox', '');
++		frame.style.width = `${content.width ?? 360}px`;
++		frame.style.height = `${content.height ?? 280}px`;
++		frame.srcdoc = this.customFrameSource(content);
++		return frame;
++	}
++
++	private customFrameSource(content: IRibbonCustomContentContribution): string {
++		const css = (content.css ?? '').replace(/<\/style/gi, '<\\/style');
++		return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'none'; font-src data:"><style>html,body{box-sizing:border-box;margin:0;min-height:100%;font:13px sans-serif}${css}</style></head><body>${content.html}</body></html>`;
++	}
++
++	private createButton(parent: HTMLElement, label: string, iconClass: string | undefined, enabled: boolean, size: RibbonItemSize = 'full', style: RibbonItemStyle = 'iconAndLabel', responsive: readonly IRibbonResponsiveLayoutContribution[] = []): { button: HTMLButtonElement; icon: HTMLElement } {
 +		const button = append(parent, $<HTMLButtonElement>('button.ribbon-item'));
++		button.dataset.ribbonSize = size;
++		button.dataset.ribbonStyle = style;
++		if (responsive.length > 0) {
++			button.dataset.responsiveLayouts = JSON.stringify(responsive);
++			button.dataset.responsiveIndex = '-1';
++		}
 +		button.type = 'button';
 +		button.disabled = !enabled;
 +		button.setAttribute('aria-label', label);
++		this.applyButtonLayout(button, size, style);
 +		const icon = append(button, $('.ribbon-item-icon'));
 +		if (iconClass) {
 +			icon.classList.add(...iconClass.split(/\s+/).filter(Boolean));
 +		}
 +		append(button, $('span.ribbon-item-label')).textContent = label;
 +		return { button, icon };
++	}
++
++	private applyButtonLayout(button: HTMLButtonElement, size: RibbonItemSize, style: RibbonItemStyle = 'iconAndLabel'): void {
++		const layout = size === 'full' ? 'vertical' : style === 'icon' ? 'icon-only' : 'horizontal';
++		for (const candidate of ['full', 'half', 'third']) {
++			button.classList.remove(`ribbon-item-${candidate}`);
++		}
++		for (const candidate of ['vertical', 'horizontal', 'icon-only']) {
++			button.classList.remove(`ribbon-item-${candidate}`);
++		}
++		button.classList.add(`ribbon-item-${size}`, `ribbon-item-${layout}`);
++		button.title = layout === 'icon-only' ? button.getAttribute('aria-label') ?? '' : '';
 +	}
 +
 +	private onTabKeyDown(event: KeyboardEvent): void {
@@ -1196,10 +1875,10 @@ index 46243a4447e57276aa01b085ad35cbb5212b98cc..3ffe5e2f01ea7685b9c3d45a62c8ac8a
  	PANEL_PART = 'workbench.parts.panel',
 diff --git a/src/vs/workbench/test/browser/parts/ribbon/ribbonPart.test.ts b/src/vs/workbench/test/browser/parts/ribbon/ribbonPart.test.ts
 new file mode 100644
-index 0000000000000000000000000000000000000000..a0f49739c6fa0656f1fb391730c09e7869a331d5
+index 0000000000000000000000000000000000000000..ba5231949bd7f45e5c45a5963d828ef7ee68d137
 --- /dev/null
 +++ b/src/vs/workbench/test/browser/parts/ribbon/ribbonPart.test.ts
-@@ -0,0 +1,201 @@
+@@ -0,0 +1,518 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -1261,11 +1940,11 @@ index 0000000000000000000000000000000000000000..a0f49739c6fa0656f1fb391730c09e78
 +		};
 +	}
 +
-+	function createPart(themeService = new TestThemeService(), contextKeyService = disposables.add(new ContextKeyService(new TestConfigurationService())), menuActions: readonly IAction[] = [], contextViewService = {} as IContextViewService): RibbonPart {
++	function createPart(themeService = new TestThemeService(), contextKeyService = disposables.add(new ContextKeyService(new TestConfigurationService())), menuActions: readonly IAction[] = [], contextViewService = {} as IContextViewService, menuGroups?: readonly (readonly [string, readonly IAction[]])[], commandService = {} as ICommandService): RibbonPart {
 +		const menuService = {
 +			createMenu: () => ({
 +				onDidChange: Event.None,
-+				getActions: () => menuActions.length > 0 ? [['navigation', menuActions]] : [],
++				getActions: () => menuGroups ?? (menuActions.length > 0 ? [['navigation', menuActions]] : []),
 +				dispose: () => { },
 +			}),
 +		} as unknown as IMenuService;
@@ -1275,7 +1954,7 @@ index 0000000000000000000000000000000000000000..a0f49739c6fa0656f1fb391730c09e78
 +			new TestLayoutService(),
 +			contextKeyService,
 +			menuService,
-+			{} as ICommandService,
++			commandService,
 +			{} as IContextMenuService,
 +			contextViewService,
 +			{} as INotificationService,
@@ -1319,6 +1998,323 @@ index 0000000000000000000000000000000000000000..a0f49739c6fa0656f1fb391730c09e78
 +		assert.strictEqual(button.querySelector('.ribbon-item-label')?.textContent, 'New File...');
 +		assert.strictEqual(button.querySelector('.ribbon-item-icon')?.classList.contains('codicon-new-file'), true);
 +		assert.strictEqual(unmappedButton.querySelector('.ribbon-item-icon')?.classList.contains('codicon-file'), true);
++	});
++
++	test('automatically lays out built-in buttons in one, two, or three rows', () => {
++		const actions = [
++			disposables.add(new Action('test.builtin.first', 'First')),
++			disposables.add(new Action('test.builtin.second', 'Second')),
++			disposables.add(new Action('test.builtin.third', 'Third')),
++			disposables.add(new Action('test.builtin.fourth', 'Fourth')),
++			disposables.add(new Action('test.builtin.fifth', 'Fifth')),
++			disposables.add(new Action('test.builtin.sixth', 'Sixth')),
++		];
++		createPart(undefined, undefined, [], undefined, [
++			['1_full', [actions[0]]],
++			['2_half', [actions[1], actions[2]]],
++			['3_third', [actions[3], actions[4], actions[5]]],
++		]);
++
++		const classes = (groupId: string) => Array.from(
++			fixture.querySelectorAll<HTMLButtonElement>(`.ribbon-group[data-group-id="${groupId}"] .ribbon-item`),
++			button => button.className,
++		);
++		assert.deepStrictEqual(classes('1_full'), ['ribbon-item ribbon-item-full ribbon-item-vertical']);
++		assert.strictEqual(classes('2_half').every(value => value === 'ribbon-item ribbon-item-half ribbon-item-horizontal'), true);
++		assert.strictEqual(classes('3_third').every(value => value === 'ribbon-item ribbon-item-third ribbon-item-horizontal'), true);
++	});
++
++	test('uses menubar separator groups and renders a localized title for each group', () => {
++		const newAction = disposables.add(new Action('workbench.action.files.newUntitledFile', 'New File...'));
++		const saveAction = disposables.add(new Action('workbench.action.files.save', 'Save'));
++		createPart(undefined, undefined, [], undefined, [
++			['1_new', [newAction]],
++			['4_save', [saveAction]],
++		]);
++
++		const groups = fixture.querySelectorAll<HTMLElement>('.ribbon-group');
++		assert.strictEqual(groups.length, 2);
++		assert.strictEqual(groups[0].dataset.groupId, '1_new');
++		assert.strictEqual(groups[0].querySelector('.ribbon-group-title')?.textContent, 'New');
++		assert.strictEqual(groups[0].querySelector('.ribbon-item-label')?.textContent, 'New File...');
++		assert.strictEqual(groups[1].dataset.groupId, '4_save');
++		assert.strictEqual(groups[1].querySelector('.ribbon-group-title')?.textContent, 'Save');
++		assert.strictEqual(groups[1].querySelector('.ribbon-item-label')?.textContent, 'Save');
++	});
++
++	test('renders every visible contributed group', () => {
++		ribbonRegistry.setTabs([contribution({
++			groups: [
++				{
++					id: 'first',
++					title: 'First',
++					items: [{ command: 'test.ribbon.first', title: 'First command', icon: '$(add)' }],
++				},
++				{
++					id: 'second',
++					title: 'Second',
++					items: [{ command: 'test.ribbon.second', title: 'Second command', icon: '$(remove)' }],
++				},
++			],
++		})]);
++		createPart();
++
++		assert.deepStrictEqual(
++			Array.from(fixture.querySelectorAll('.ribbon-group-title'), element => element.textContent),
++			['First', 'Second'],
++		);
++	});
++
++	test('renders full, half, and third-height contributed button layouts', () => {
++		ribbonRegistry.setTabs([contribution({
++			groups: [
++				{
++					id: 'sizes',
++					title: 'Sizes',
++					items: [
++						{ command: 'test.ribbon.full', title: 'Full', icon: '$(add)', style: 'icon' },
++						{ command: 'test.ribbon.halfIcon', title: 'Half icon', icon: '$(add)', size: 'half', style: 'icon' },
++						{ command: 'test.ribbon.halfLabel', title: 'Half label', icon: '$(add)', size: 'half' },
++						{ command: 'test.ribbon.thirdIcon', title: 'Third icon', icon: '$(add)', size: 'third', style: 'icon' },
++						{ command: 'test.ribbon.thirdLabel', title: 'Third label', icon: '$(add)', size: 'third', style: 'iconAndLabel' },
++					],
++				},
++			],
++		})]);
++		createPart();
++
++		const buttons = new Map(Array.from(
++			fixture.querySelectorAll<HTMLButtonElement>('.ribbon-item'),
++			button => [button.getAttribute('aria-label'), button] as const,
++		));
++
++		assert.strictEqual(buttons.get('Full')?.className, 'ribbon-item ribbon-item-full ribbon-item-vertical');
++		assert.strictEqual(buttons.get('Half icon')?.className, 'ribbon-item ribbon-item-half ribbon-item-icon-only');
++		assert.strictEqual(buttons.get('Half icon')?.title, 'Half icon');
++		assert.strictEqual(buttons.get('Half label')?.className, 'ribbon-item ribbon-item-half ribbon-item-horizontal');
++		assert.strictEqual(buttons.get('Third icon')?.className, 'ribbon-item ribbon-item-third ribbon-item-icon-only');
++		assert.strictEqual(buttons.get('Third label')?.className, 'ribbon-item ribbon-item-third ribbon-item-horizontal');
++	});
++
++	test('renders split and menu-only dropdowns and keeps their click targets separate', () => {
++		const popup = mainWindow.document.createElement('div');
++		fixture.append(popup);
++		let renderDisposable: IDisposable | undefined;
++		const contextViewService = {
++			showContextView: (delegate: IContextViewDelegate) => {
++				renderDisposable?.dispose();
++				popup.replaceChildren();
++				renderDisposable = delegate.render(popup);
++				delegate.focus?.();
++				return { close: () => renderDisposable?.dispose() };
++			},
++			hideContextView: () => renderDisposable?.dispose(),
++		} as unknown as IContextViewService;
++		const executed: string[] = [];
++		const commandService = {
++			executeCommand: async (command: string) => { executed.push(command); },
++		} as unknown as ICommandService;
++		ribbonRegistry.setTabs([contribution({
++			groups: [{
++				id: 'dropdowns',
++				title: 'Dropdowns',
++				items: [
++					{
++						type: 'splitButton',
++						command: 'test.ribbon.run',
++						title: 'Run',
++						icon: '$(play)',
++						menu: { items: [{ command: 'test.ribbon.option', title: 'Option', icon: '$(list-selection)' }] },
++					},
++					{
++						type: 'dropdown',
++						title: 'More',
++						icon: '$(tools)',
++						menu: { custom: { html: '<strong id="custom">Custom</strong>', css: '#custom { color: red }' } },
++					},
++				],
++			}],
++		})]);
++		createPart(undefined, undefined, [], contextViewService, undefined, commandService);
++
++		const split = fixture.querySelector<HTMLElement>('.ribbon-dropdown-item:not(.ribbon-dropdown-single)')!;
++		const primary = split.querySelector<HTMLButtonElement>('.ribbon-dropdown-primary')!;
++		const trigger = split.querySelector<HTMLButtonElement>('.ribbon-dropdown-trigger')!;
++		primary.click();
++		assert.deepStrictEqual(executed, ['test.ribbon.run']);
++		assert.strictEqual(popup.childElementCount, 0);
++
++		trigger.click();
++		assert.strictEqual(popup.querySelector('.ribbon-item')?.getAttribute('aria-label'), 'Option');
++
++		fixture.querySelector<HTMLButtonElement>('.ribbon-dropdown-single')!.click();
++		const frame = popup.querySelector<HTMLIFrameElement>('.ribbon-custom-content')!;
++		assert.strictEqual(frame.getAttribute('sandbox'), '');
++		assert.match(frame.srcdoc, /script-src 'none'/);
++		assert.doesNotMatch(frame.srcdoc, /<script/i);
++		assert.match(frame.srcdoc, /id="custom"/);
++	});
++
++	test('navigates nested dropdowns inside one context view and closes after running a command', () => {
++		const popup = mainWindow.document.createElement('div');
++		fixture.append(popup);
++		let renderDisposable: IDisposable | undefined;
++		let showCalls = 0;
++		let hideCalls = 0;
++		const contextViewService = {
++			showContextView: (delegate: IContextViewDelegate) => {
++				showCalls++;
++				renderDisposable?.dispose();
++				popup.replaceChildren();
++				renderDisposable = delegate.render(popup);
++				delegate.focus?.();
++				return { close: () => renderDisposable?.dispose() };
++			},
++			hideContextView: () => {
++				hideCalls++;
++				renderDisposable?.dispose();
++			},
++		} as unknown as IContextViewService;
++		const executed: string[] = [];
++		const commandService = {
++			executeCommand: async (command: string) => { executed.push(command); },
++		} as unknown as ICommandService;
++		ribbonRegistry.setTabs([contribution({
++			groups: [{
++				id: 'nested',
++				title: 'Nested',
++				items: [{
++					type: 'dropdown',
++					title: 'Outer',
++					icon: '$(list-tree)',
++					menu: {
++						items: [{
++							type: 'dropdown',
++							title: 'More',
++							icon: '$(chevron-right)',
++							menu: {
++								items: [{ command: 'test.ribbon.safe', title: 'Safe', icon: '$(shield)' }],
++							},
++						}],
++					},
++				}],
++			}],
++		})]);
++		createPart(undefined, undefined, [], contextViewService, undefined, commandService);
++
++		fixture.querySelector<HTMLButtonElement>('.ribbon-dropdown-single')!.click();
++		assert.strictEqual(showCalls, 1);
++		popup.querySelector<HTMLButtonElement>('.ribbon-dropdown-single')!.click();
++		assert.strictEqual(showCalls, 1);
++		assert.strictEqual(popup.querySelector('.ribbon-menu-back')?.textContent, 'Back');
++		assert.strictEqual(popup.querySelector('.ribbon-item')?.getAttribute('aria-label'), 'Safe');
++
++		popup.querySelector<HTMLButtonElement>('.ribbon-menu-back')!.click();
++		assert.strictEqual(popup.querySelector('.ribbon-dropdown-single')?.getAttribute('aria-label'), 'Open More menu');
++		assert.strictEqual(popup.querySelector('[aria-label="Safe"]'), null);
++
++		popup.querySelector<HTMLButtonElement>('.ribbon-dropdown-single')!.click();
++		popup.querySelector<HTMLButtonElement>('.ribbon-item')!.click();
++		assert.deepStrictEqual(executed, ['test.ribbon.safe']);
++		assert.strictEqual(hideCalls, 1);
++	});
++
++	test('merges related commands into a responsive menu before folding the group', () => {
++		const responsiveMenu = { id: 'editing', title: 'Editing', icon: '$(edit)' };
++		ribbonRegistry.setTabs([contribution({
++			groups: [{
++				id: 'responsive-menu',
++				title: 'Responsive menu',
++				items: [
++					{ command: 'test.ribbon.cut', title: 'Cut', icon: '$(cut)', responsiveMenu },
++					{ command: 'test.ribbon.copy', title: 'Copy', icon: '$(copy)', responsiveMenu },
++				],
++			}],
++		})]);
++		createPart();
++
++		const viewport = fixture.querySelector<HTMLElement>('.ribbon-scroll-viewport')!;
++		const groups = fixture.querySelector<HTMLElement>('.ribbon-groups')!;
++		const menu = fixture.querySelector<HTMLElement>('.ribbon-responsive-menu')!;
++		const sources = fixture.querySelectorAll<HTMLElement>('[data-responsive-menu-source]');
++		Object.defineProperty(viewport, 'clientWidth', { configurable: true, value: 160 });
++		Object.defineProperty(groups, 'scrollWidth', {
++			configurable: true,
++			get: () => menu.hidden ? 260 : 140,
++		});
++		mainWindow.dispatchEvent(new mainWindow.Event('resize'));
++
++		assert.strictEqual(menu.hidden, false);
++		assert.strictEqual(Array.from(sources).every(source => source.hidden), true);
++		assert.strictEqual(groups.querySelectorAll('.ribbon-group.folded').length, 0);
++	});
++
++	test('applies declared responsive layouts before folding a group', () => {
++		ribbonRegistry.setTabs([contribution({
++			groups: [{
++				id: 'responsive',
++				title: 'Responsive',
++				items: [{
++					command: 'test.ribbon.save',
++					title: 'Save',
++					icon: '$(save)',
++					responsive: [
++						{ size: 'half' },
++						{ size: 'third' },
++						{ size: 'third', style: 'icon' },
++					],
++				}],
++			}],
++		})]);
++		createPart();
++
++		const viewport = fixture.querySelector<HTMLElement>('.ribbon-scroll-viewport')!;
++		const groups = fixture.querySelector<HTMLElement>('.ribbon-groups')!;
++		const button = fixture.querySelector<HTMLButtonElement>('.ribbon-item[aria-label="Save"]')!;
++		Object.defineProperty(viewport, 'clientWidth', { configurable: true, value: 160 });
++		Object.defineProperty(groups, 'scrollWidth', {
++			configurable: true,
++			get: () => button.classList.contains('ribbon-item-icon-only') ? 140 : 240,
++		});
++		mainWindow.dispatchEvent(new mainWindow.Event('resize'));
++
++		assert.strictEqual(button.className, 'ribbon-item ribbon-item-third ribbon-item-icon-only');
++		assert.strictEqual(groups.querySelectorAll('.ribbon-group.folded').length, 0);
++	});
++
++	test('folds all groups before showing boundary-aware scroll buttons', () => {
++		const actions = [
++			disposables.add(new Action('test.first', 'First')),
++			disposables.add(new Action('test.second', 'Second')),
++			disposables.add(new Action('test.third', 'Third')),
++		];
++		createPart(undefined, undefined, [], undefined, [
++			['1_first', [actions[0]]],
++			['2_second', [actions[1]]],
++			['3_third', [actions[2]]],
++		]);
++
++		const viewport = fixture.querySelector<HTMLElement>('.ribbon-scroll-viewport')!;
++		const groups = fixture.querySelector<HTMLElement>('.ribbon-groups')!;
++		Object.defineProperty(viewport, 'clientWidth', { configurable: true, value: 160 });
++		Object.defineProperty(groups, 'scrollWidth', { configurable: true, get: () => 300 - groups.querySelectorAll('.ribbon-group.folded').length * 50 });
++		mainWindow.dispatchEvent(new mainWindow.Event('resize'));
++
++		assert.strictEqual(groups.querySelectorAll('.ribbon-group.folded').length, 3);
++		const left = fixture.querySelector<HTMLButtonElement>('.ribbon-scroll-button.left')!;
++		const right = fixture.querySelector<HTMLButtonElement>('.ribbon-scroll-button.right')!;
++		assert.strictEqual(left.hidden, true);
++		assert.strictEqual(right.hidden, true);
++
++		Object.defineProperty(groups, 'scrollWidth', { configurable: true, get: () => 400 - groups.querySelectorAll('.ribbon-group.folded').length * 50 });
++		mainWindow.dispatchEvent(new mainWindow.Event('resize'));
++		assert.strictEqual(groups.querySelectorAll('.ribbon-group.folded').length, 3);
++		assert.strictEqual(left.hidden, true);
++		assert.strictEqual(right.hidden, false);
++
++		right.click();
++		assert.strictEqual(left.hidden, false);
++		assert.strictEqual(right.hidden, true);
 +	});
 +
 +	test('closes every built-in collapsed overlay on activity bar mousedown before its click handler runs', () => {
