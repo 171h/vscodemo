@@ -1,4 +1,4 @@
-Ribbon Part 补丁：在 Banner 之后增加横跨 Workbench 的可折叠功能区，提供 File/View/Help 内置标签和扩展声明式 contributes.ribbon 标签、分组、命令按钮。
+Ribbon Part 补丁：在 Banner 之后增加横跨 Workbench 的可折叠功能区，提供 File/View/Help 内置标签、按原菜单分隔线同步的命名分组，以及扩展声明式 contributes.ribbon 标签、分组、命令按钮。
 保留现有 ActivityBar 入口；Ribbon 支持状态记忆、键盘导航、折叠后的临时覆盖层和启动 Splash 尺寸恢复。
 
 diff --git a/src/vs/code/electron-browser/workbench/workbench.ts b/src/vs/code/electron-browser/workbench/workbench.ts
@@ -641,7 +641,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f53279a98c1e4
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/ribbonPart.ts
-@@ -0,0 +1,497 @@
+@@ -0,0 +1,533 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -698,6 +698,35 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +
 +function orderOf(tab: RibbonTab): number {
 +	return tab.order ?? 0;
++}
++
++function builtinGroupTitle(tab: IBuiltinRibbonTab, groupId: string, actions: readonly IAction[]): string {
++	switch (`${tab.id}/${groupId}`) {
++		case `${RibbonBuiltinTabId.File}/1_new`: return localize('ribbon.group.file.new', "New");
++		case `${RibbonBuiltinTabId.File}/2_open`: return localize('ribbon.group.file.open', "Open");
++		case `${RibbonBuiltinTabId.File}/3_workspace`: return localize('ribbon.group.file.workspace', "Workspace");
++		case `${RibbonBuiltinTabId.File}/4_save`: return localize('ribbon.group.file.save', "Save");
++		case `${RibbonBuiltinTabId.File}/45_share`: return localize('ribbon.group.file.share', "Share");
++		case `${RibbonBuiltinTabId.File}/5_autosave`: return localize('ribbon.group.file.preferences', "Preferences");
++		case `${RibbonBuiltinTabId.File}/6_close`: return localize('ribbon.group.file.close', "Close");
++		case `${RibbonBuiltinTabId.File}/z_ConfirmClose`: return localize('ribbon.group.file.confirmClose', "Close Confirmation");
++		case `${RibbonBuiltinTabId.File}/z_Exit`: return localize('ribbon.group.file.exit', "Exit");
++		case `${RibbonBuiltinTabId.View}/1_open`: return localize('ribbon.group.view.open', "Open");
++		case `${RibbonBuiltinTabId.View}/2_appearance`: return localize('ribbon.group.view.appearance', "Appearance");
++		case `${RibbonBuiltinTabId.View}/3_sidebar`: return localize('ribbon.group.view.sidebar', "Primary Side Bar");
++		case `${RibbonBuiltinTabId.View}/4_auxbar`: return localize('ribbon.group.view.auxiliaryBar', "Secondary Side Bar");
++		case `${RibbonBuiltinTabId.View}/5_panel`: return localize('ribbon.group.view.panel', "Panel");
++		case `${RibbonBuiltinTabId.View}/5_copilot`: return localize('ribbon.group.view.copilot', "Copilot");
++		case `${RibbonBuiltinTabId.View}/6_editor`: return localize('ribbon.group.view.editor', "Editor");
++		case `${RibbonBuiltinTabId.Help}/1_welcome`: return localize('ribbon.group.help.getStarted', "Get Started");
++		case `${RibbonBuiltinTabId.Help}/2_reference`: return localize('ribbon.group.help.reference', "Documentation");
++		case `${RibbonBuiltinTabId.Help}/3_feedback`: return localize('ribbon.group.help.feedback', "Feedback");
++		case `${RibbonBuiltinTabId.Help}/4_legal`: return localize('ribbon.group.help.legal', "Legal");
++		case `${RibbonBuiltinTabId.Help}/5_tools`: return localize('ribbon.group.help.tools', "Tools");
++		case `${RibbonBuiltinTabId.Help}/z_about`: return localize('ribbon.group.help.about', "About");
++	}
++
++	return mnemonicButtonLabel(actions[0]?.label ?? tab.title, true);
 +}
 +
 +function builtinActionFallbackIcon(tab: IBuiltinRibbonTab, action: IAction): ThemeIcon {
@@ -989,21 +1018,28 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +					this.renderActiveContent(tab);
 +				}
 +			}));
-+			const actions = menu.getActions().flatMap(([, groupActions]) => groupActions);
-+			return this.renderActionGroup(groups, tab, actions, closeAfterRun, store);
++			let firstFocusableButton: HTMLButtonElement | undefined;
++			for (const [groupId, actions] of menu.getActions()) {
++				const candidate = this.renderActionGroup(groups, tab, groupId, actions, closeAfterRun, store);
++				firstFocusableButton ??= candidate;
++			}
++			return firstFocusableButton;
 +		}
 +
 +		let firstFocusableButton: HTMLButtonElement | undefined;
 +		for (const group of tab.groups.filter(group => this.matches(group.when))) {
-+			firstFocusableButton ??= this.renderContributionGroup(groups, tab, group, closeAfterRun, store);
++			const candidate = this.renderContributionGroup(groups, tab, group, closeAfterRun, store);
++			firstFocusableButton ??= candidate;
 +		}
 +		return firstFocusableButton;
 +	}
 +
-+	private renderActionGroup(parent: HTMLElement, tab: IBuiltinRibbonTab, actions: readonly IAction[], closeAfterRun: boolean, store: DisposableStore): HTMLButtonElement | undefined {
++	private renderActionGroup(parent: HTMLElement, tab: IBuiltinRibbonTab, groupId: string, actions: readonly IAction[], closeAfterRun: boolean, store: DisposableStore): HTMLButtonElement | undefined {
++		const title = builtinGroupTitle(tab, groupId, actions);
 +		const group = append(parent, $('.ribbon-group'));
 +		group.setAttribute('role', 'group');
-+		group.setAttribute('aria-label', tab.title);
++		group.setAttribute('aria-label', title);
++		group.dataset.groupId = groupId;
 +		const items = append(group, $('.ribbon-items.compact'));
 +		let firstFocusableButton: HTMLButtonElement | undefined;
 +		for (const action of actions) {
@@ -1024,7 +1060,7 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +				}
 +			}));
 +		}
-+		append(group, $('div.ribbon-group-title')).textContent = tab.title;
++		append(group, $('div.ribbon-group-title')).textContent = title;
 +		return firstFocusableButton;
 +	}
 +
@@ -1199,7 +1235,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..a0f49739c6fa0656f1fb391730c09e7869a331d5
 --- /dev/null
 +++ b/src/vs/workbench/test/browser/parts/ribbon/ribbonPart.test.ts
-@@ -0,0 +1,201 @@
+@@ -0,0 +1,242 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -1261,11 +1297,11 @@ index 0000000000000000000000000000000000000000..a0f49739c6fa0656f1fb391730c09e78
 +		};
 +	}
 +
-+	function createPart(themeService = new TestThemeService(), contextKeyService = disposables.add(new ContextKeyService(new TestConfigurationService())), menuActions: readonly IAction[] = [], contextViewService = {} as IContextViewService): RibbonPart {
++	function createPart(themeService = new TestThemeService(), contextKeyService = disposables.add(new ContextKeyService(new TestConfigurationService())), menuActions: readonly IAction[] = [], contextViewService = {} as IContextViewService, menuGroups?: readonly (readonly [string, readonly IAction[]])[]): RibbonPart {
 +		const menuService = {
 +			createMenu: () => ({
 +				onDidChange: Event.None,
-+				getActions: () => menuActions.length > 0 ? [['navigation', menuActions]] : [],
++				getActions: () => menuGroups ?? (menuActions.length > 0 ? [['navigation', menuActions]] : []),
 +				dispose: () => { },
 +			}),
 +		} as unknown as IMenuService;
@@ -1319,6 +1355,47 @@ index 0000000000000000000000000000000000000000..a0f49739c6fa0656f1fb391730c09e78
 +		assert.strictEqual(button.querySelector('.ribbon-item-label')?.textContent, 'New File...');
 +		assert.strictEqual(button.querySelector('.ribbon-item-icon')?.classList.contains('codicon-new-file'), true);
 +		assert.strictEqual(unmappedButton.querySelector('.ribbon-item-icon')?.classList.contains('codicon-file'), true);
++	});
++
++	test('uses menubar separator groups and renders a localized title for each group', () => {
++		const newAction = disposables.add(new Action('workbench.action.files.newUntitledFile', 'New File...'));
++		const saveAction = disposables.add(new Action('workbench.action.files.save', 'Save'));
++		createPart(undefined, undefined, [], undefined, [
++			['1_new', [newAction]],
++			['4_save', [saveAction]],
++		]);
++
++		const groups = fixture.querySelectorAll<HTMLElement>('.ribbon-group');
++		assert.strictEqual(groups.length, 2);
++		assert.strictEqual(groups[0].dataset.groupId, '1_new');
++		assert.strictEqual(groups[0].querySelector('.ribbon-group-title')?.textContent, 'New');
++		assert.strictEqual(groups[0].querySelector('.ribbon-item-label')?.textContent, 'New File...');
++		assert.strictEqual(groups[1].dataset.groupId, '4_save');
++		assert.strictEqual(groups[1].querySelector('.ribbon-group-title')?.textContent, 'Save');
++		assert.strictEqual(groups[1].querySelector('.ribbon-item-label')?.textContent, 'Save');
++	});
++
++	test('renders every visible contributed group', () => {
++		ribbonRegistry.setTabs([contribution({
++			groups: [
++				{
++					id: 'first',
++					title: 'First',
++					items: [{ command: 'test.ribbon.first', title: 'First command', icon: '$(add)' }],
++				},
++				{
++					id: 'second',
++					title: 'Second',
++					items: [{ command: 'test.ribbon.second', title: 'Second command', icon: '$(remove)' }],
++				},
++			],
++		})]);
++		createPart();
++
++		assert.deepStrictEqual(
++			Array.from(fixture.querySelectorAll('.ribbon-group-title'), element => element.textContent),
++			['First', 'Second'],
++		);
 +	});
 +
 +	test('closes every built-in collapsed overlay on activity bar mousedown before its click handler runs', () => {
