@@ -114,6 +114,8 @@ build(upstream): 升级至 vscode 1.122.0 / vscodium 1.122.03500
 - 描述用中文，简洁祈使句；type/scope 用小写英文。
 - 一个 commit 一个逻辑变更；升级 vscode 版本的 lock 文件 + 子模块指针 +
   重做的补丁应在同一个 `build(upstream)` commit 中。
+- AI 代理提交时必须将用户作为 commit Author；Codex 仅作为 `Co-Authored-By`
+  合作者署名，不得把 Codex 设为主作者。
 - AI 代理提交时保留其署名脚注（如 `Co-Authored-By: Claude ...`）。
 
 ## 环境注意事项

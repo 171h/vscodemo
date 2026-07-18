@@ -1,7 +1,7 @@
 Ribbon Part 补丁：在 Banner 之后增加横跨 Workbench 的可折叠功能区，提供 File/View/Help 内置标签、按原菜单分隔线同步的命名分组，以及扩展声明式 contributes.ribbon 标签、分组、命令按钮、Office 风格分割/单体下拉按钮与隔离的自定义菜单内容。
 按钮支持全高、半高和三分之一高尺寸，可在同一功能组中形成单行、两行和三行布局；紧凑按钮支持纯图标或左图标右标题样式。
 保留现有 ActivityBar 入口；Ribbon 支持状态记忆、键盘导航、折叠后的临时覆盖层和启动 Splash 尺寸恢复。
-宽度不足时全部功能组折叠为下拉菜单，仍溢出时通过按边界显示的左右悬浮按钮滚动，且不显示横向滚动条。
+宽度不足时先按按钮声明逐级切换为半高、三分之一高或纯图标布局，再将相近功能合并为下拉菜单，随后逐个折叠功能组；仍溢出时通过按边界显示的左右悬浮按钮滚动，且不显示横向滚动条。
 
 diff --git a/src/vs/code/electron-browser/workbench/workbench.ts b/src/vs/code/electron-browser/workbench/workbench.ts
 index 767fbe08db3c00b0d3da3e5c46843e87702b3ed6..bdc2f1954ce3cf5de71e97d553de40c289bf455f 100644
@@ -636,7 +636,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..0fc45fc6eeca9fb12f5281df2d1a63f00aa5403c
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/ribbonExtensionPoint.ts
-@@ -0,0 +1,277 @@
+@@ -0,0 +1,319 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -657,6 +657,17 @@ index 0000000000000000000000000000000000000000..0fc45fc6eeca9fb12f5281df2d1a63f0
 +export type RibbonItemSize = 'full' | 'half' | 'third';
 +export type RibbonItemStyle = 'icon' | 'iconAndLabel';
 +export type RibbonItemType = 'button' | 'splitButton' | 'dropdown';
++
++export interface IRibbonResponsiveLayoutContribution {
++	readonly size: RibbonItemSize;
++	readonly style?: RibbonItemStyle;
++}
++
++export interface IRibbonResponsiveMenuContribution {
++	readonly id: string;
++	readonly title: string;
++	readonly icon: string | IRibbonIconPath;
++}
 +
 +export interface IRibbonCustomContentContribution {
 +	readonly html: string;
@@ -680,6 +691,8 @@ index 0000000000000000000000000000000000000000..0fc45fc6eeca9fb12f5281df2d1a63f0
 +	readonly menu?: IRibbonMenuContribution;
 +	readonly size?: RibbonItemSize;
 +	readonly style?: RibbonItemStyle;
++	readonly responsive?: readonly IRibbonResponsiveLayoutContribution[];
++	readonly responsiveMenu?: IRibbonResponsiveMenuContribution;
 +	readonly order?: number;
 +	readonly when?: string;
 +	readonly arguments?: readonly unknown[];
@@ -792,6 +805,35 @@ index 0000000000000000000000000000000000000000..0fc45fc6eeca9fb12f5281df2d1a63f0
 +		order: orderProperty,
 +		size: { type: 'string', enum: ['full', 'half', 'third'], default: 'full', description: localize('ribbon.itemSize', "Button height relative to the Ribbon content: full, half, or third.") },
 +		style: { type: 'string', enum: ['icon', 'iconAndLabel'], default: 'iconAndLabel', description: localize('ribbon.itemStyle', "Compact button content: icon only, or an icon followed by its label. Full-height buttons always place the icon above the label.") },
++		responsive: {
++			type: 'array',
++			items: {
++				type: 'object',
++				additionalProperties: false,
++				required: ['size'],
++				properties: {
++					size: { type: 'string', enum: ['full', 'half', 'third'] },
++					style: { type: 'string', enum: ['icon', 'iconAndLabel'], default: 'iconAndLabel' },
++				},
++			},
++			description: localize('ribbon.itemResponsive', "Ordered compact layouts used when the Ribbon does not have enough width."),
++		},
++		responsiveMenu: {
++			type: 'object',
++			additionalProperties: false,
++			required: ['id', 'title', 'icon'],
++			properties: {
++				id: { type: 'string' },
++				title: { type: 'string' },
++				icon: {
++					anyOf: [
++						{ type: 'string' },
++						{ type: 'object', required: ['light', 'dark'], additionalProperties: false, properties: { light: { type: 'string' }, dark: { type: 'string' } } },
++					],
++				},
++			},
++			description: localize('ribbon.itemResponsiveMenu', "Combines items with the same id into this dropdown when compact layouts are not enough."),
++		},
 +		when: whenProperty,
 +		arguments: { type: 'array', description: localize('ribbon.arguments', "Arguments passed to the command."), items: {} },
 +		menu: {
@@ -919,7 +961,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f53279a98c1e4
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/ribbonPart.ts
-@@ -0,0 +1,733 @@
+@@ -0,0 +1,820 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -947,7 +989,7 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +import { IThemeService } from '../../../../platform/theme/common/themeService.js';
 +import { Part } from '../../part.js';
 +import { IWorkbenchLayoutService, Parts } from '../../../services/layout/browser/layoutService.js';
-+import { IRegisteredRibbonTab, IRibbonCustomContentContribution, IRibbonGroupContribution, IRibbonItemContribution, IRibbonMenuContribution, RibbonBuiltinTabId, RibbonItemSize, RibbonItemStyle, ribbonRegistry } from './ribbonExtensionPoint.js';
++import { IRegisteredRibbonTab, IRibbonCustomContentContribution, IRibbonGroupContribution, IRibbonItemContribution, IRibbonMenuContribution, IRibbonResponsiveLayoutContribution, IRibbonResponsiveMenuContribution, RibbonBuiltinTabId, RibbonItemSize, RibbonItemStyle, ribbonRegistry } from './ribbonExtensionPoint.js';
 +import { IRibbonService } from './ribbonService.js';
 +
 +const EXPANDED_HEIGHT = 130;
@@ -1338,7 +1380,13 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +		for (const action of actions) {
 +			const label = mnemonicButtonLabel(action.label, true);
 +			const size: RibbonItemSize = actions.length === 1 ? 'full' : actions.length === 2 ? 'half' : 'third';
-+			const { button, icon } = this.createButton(items, label, action.class, action.enabled, size);
++			const compactLayouts: IRibbonResponsiveLayoutContribution[] = size === 'full'
++				? [{ size: 'half' }, { size: 'third' }]
++				: size === 'half' ? [{ size: 'third' }] : [];
++			if (this.supportsIconOnlyLayout(action.id)) {
++				compactLayouts.push({ size: 'third', style: 'icon' });
++			}
++			const { button, icon } = this.createButton(items, label, action.class, action.enabled, size, 'iconAndLabel', compactLayouts);
 +			this.renderBuiltinActionIcon(icon, tab, action);
 +			if (!button.disabled) {
 +				firstFocusableButton ??= button;
@@ -1356,6 +1404,11 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +		}
 +		append(group, $('div.ribbon-group-title')).textContent = title;
 +		return firstFocusableButton;
++	}
++
++	private supportsIconOnlyLayout(commandId: string): boolean {
++		return /(?:^|\.)(?:save|saveAll|print|undo|redo|find|search)$/i.test(commandId)
++			|| /(?:save|print|undo|redo|find|search)/i.test(commandId);
 +	}
 +
 +	private renderBuiltinActionIcon(container: HTMLElement, tab: IBuiltinRibbonTab, action: IAction): void {
@@ -1393,12 +1446,31 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +		collapsibleGroups.push(group);
 +		const items = append(group, $('.ribbon-items'));
 +		this.renderContributionGroupDropdown(group, tab, contribution, store);
++		const responsiveMenus = new Map<string, { definition: IRibbonResponsiveMenuContribution; items: IRibbonItemContribution[] }>();
 +		let firstFocusableButton: HTMLButtonElement | undefined;
 +		for (const item of contribution.items.filter(item => this.matches(item.when))) {
 +			const button = this.renderContributionItem(items, tab, item, closeAfterRun, store);
++			if (item.responsiveMenu) {
++				(items.lastElementChild as HTMLElement).dataset.responsiveMenuSource = item.responsiveMenu.id;
++				const menu = responsiveMenus.get(item.responsiveMenu.id) ?? { definition: item.responsiveMenu, items: [] };
++				menu.items.push(item);
++				responsiveMenus.set(item.responsiveMenu.id, menu);
++			}
 +			if (!button.disabled) {
 +				firstFocusableButton ??= button;
 +			}
++		}
++		for (const [id, menu] of responsiveMenus) {
++			this.renderContributionItem(items, tab, {
++				type: 'dropdown',
++				title: menu.definition.title,
++				icon: menu.definition.icon,
++				menu: { items: menu.items },
++			}, closeAfterRun, store);
++			const element = items.lastElementChild as HTMLElement;
++			element.classList.add('ribbon-responsive-menu');
++			element.dataset.responsiveMenuId = id;
++			element.hidden = true;
 +		}
 +		append(group, $('div.ribbon-group-title')).textContent = contribution.title;
 +		return firstFocusableButton;
@@ -1439,15 +1511,58 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +			left.hidden = maximum === 0 || viewport.scrollLeft <= 1;
 +			right.hidden = maximum === 0 || viewport.scrollLeft >= maximum - 1;
 +		};
++		const responsiveButtons = Array.from(groups.querySelectorAll<HTMLButtonElement>('.ribbon-item[data-responsive-layouts]'));
++		const responsiveMenus = Array.from(groups.querySelectorAll<HTMLElement>('.ribbon-responsive-menu'));
++		const responsiveMenuSources = Array.from(groups.querySelectorAll<HTMLElement>('[data-responsive-menu-source]'));
 +		const fit = () => {
 +			for (const group of collapsibleGroups) {
 +				group.classList.remove('folded');
 +			}
++			for (const button of responsiveButtons) {
++				this.applyButtonLayout(button, button.dataset.ribbonSize as RibbonItemSize, button.dataset.ribbonStyle as RibbonItemStyle);
++				button.dataset.responsiveIndex = '-1';
++			}
++			for (const source of responsiveMenuSources) {
++				source.hidden = false;
++			}
++			for (const menu of responsiveMenus) {
++				menu.hidden = true;
++			}
 +			viewport.scrollLeft = 0;
-+			if (groups.scrollWidth > viewport.clientWidth) {
-+				for (const group of collapsibleGroups) {
-+					group.classList.add('folded');
++
++			let changed = true;
++			while (groups.scrollWidth > viewport.clientWidth && changed) {
++				changed = false;
++				for (const button of responsiveButtons) {
++					const layouts = JSON.parse(button.dataset.responsiveLayouts ?? '[]') as IRibbonResponsiveLayoutContribution[];
++					const next = Number(button.dataset.responsiveIndex ?? '-1') + 1;
++					const layout = layouts[next];
++					if (!layout) {
++						continue;
++					}
++					this.applyButtonLayout(button, layout.size, layout.style);
++					button.dataset.responsiveIndex = String(next);
++					changed = true;
++					if (groups.scrollWidth <= viewport.clientWidth) {
++						break;
++					}
 +				}
++			}
++
++			for (const menu of responsiveMenus) {
++				if (groups.scrollWidth <= viewport.clientWidth) {
++					break;
++				}
++				for (const source of responsiveMenuSources) {
++					if (source.dataset.responsiveMenuSource === menu.dataset.responsiveMenuId) {
++						source.hidden = true;
++					}
++				}
++				menu.hidden = false;
++			}
++
++			for (let index = collapsibleGroups.length - 1; groups.scrollWidth > viewport.clientWidth && index >= 0; index--) {
++				collapsibleGroups[index].classList.add('folded');
 +			}
 +			updateScrollButtons();
 +		};
@@ -1473,7 +1588,7 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +		const type = item.type ?? 'button';
 +		const enabled = this.isContributionCommandEnabled(item.command);
 +		if (type === 'button') {
-+			const { button, icon } = this.createButton(parent, item.title, undefined, enabled, item.size, item.style);
++			const { button, icon } = this.createButton(parent, item.title, undefined, enabled, item.size, item.style, item.responsive);
 +			this.renderContributionIcon(icon, tab, item);
 +			store.add(addDisposableListener(button, EventType.CLICK, () => this.runContributionCommand(item, closeAfterRun)));
 +			return button;
@@ -1602,22 +1717,36 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +		return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; font-src data:"><style>html,body{box-sizing:border-box;margin:0;min-height:100%;font:13px sans-serif}${css}</style></head><body>${content.html}<script>${bridge}<\/script><script>${javascript}<\/script></body></html>`;
 +	}
 +
-+	private createButton(parent: HTMLElement, label: string, iconClass: string | undefined, enabled: boolean, size: RibbonItemSize = 'full', style: RibbonItemStyle = 'iconAndLabel'): { button: HTMLButtonElement; icon: HTMLElement } {
++	private createButton(parent: HTMLElement, label: string, iconClass: string | undefined, enabled: boolean, size: RibbonItemSize = 'full', style: RibbonItemStyle = 'iconAndLabel', responsive: readonly IRibbonResponsiveLayoutContribution[] = []): { button: HTMLButtonElement; icon: HTMLElement } {
 +		const button = append(parent, $<HTMLButtonElement>('button.ribbon-item'));
-+		const layout = size === 'full' ? 'vertical' : style === 'icon' ? 'icon-only' : 'horizontal';
-+		button.classList.add(`ribbon-item-${size}`, `ribbon-item-${layout}`);
++		button.dataset.ribbonSize = size;
++		button.dataset.ribbonStyle = style;
++		if (responsive.length > 0) {
++			button.dataset.responsiveLayouts = JSON.stringify(responsive);
++			button.dataset.responsiveIndex = '-1';
++		}
 +		button.type = 'button';
 +		button.disabled = !enabled;
 +		button.setAttribute('aria-label', label);
-+		if (layout === 'icon-only') {
-+			button.title = label;
-+		}
++		this.applyButtonLayout(button, size, style);
 +		const icon = append(button, $('.ribbon-item-icon'));
 +		if (iconClass) {
 +			icon.classList.add(...iconClass.split(/\s+/).filter(Boolean));
 +		}
 +		append(button, $('span.ribbon-item-label')).textContent = label;
 +		return { button, icon };
++	}
++
++	private applyButtonLayout(button: HTMLButtonElement, size: RibbonItemSize, style: RibbonItemStyle = 'iconAndLabel'): void {
++		const layout = size === 'full' ? 'vertical' : style === 'icon' ? 'icon-only' : 'horizontal';
++		for (const candidate of ['full', 'half', 'third']) {
++			button.classList.remove(`ribbon-item-${candidate}`);
++		}
++		for (const candidate of ['vertical', 'horizontal', 'icon-only']) {
++			button.classList.remove(`ribbon-item-${candidate}`);
++		}
++		button.classList.add(`ribbon-item-${size}`, `ribbon-item-${layout}`);
++		button.title = layout === 'icon-only' ? button.getAttribute('aria-label') ?? '' : '';
 +	}
 +
 +	private onTabKeyDown(event: KeyboardEvent): void {
@@ -1713,7 +1842,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..a0f49739c6fa0656f1fb391730c09e7869a331d5
 --- /dev/null
 +++ b/src/vs/workbench/test/browser/parts/ribbon/ribbonPart.test.ts
-@@ -0,0 +1,390 @@
+@@ -0,0 +1,453 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -1987,6 +2116,69 @@ index 0000000000000000000000000000000000000000..a0f49739c6fa0656f1fb391730c09e78
 +		assert.strictEqual(frame.getAttribute('sandbox'), 'allow-scripts');
 +		assert.match(frame.srcdoc, /acquireRibbonApi/);
 +		assert.match(frame.srcdoc, /id="custom"/);
++	});
++
++	test('merges related commands into a responsive menu before folding the group', () => {
++		const responsiveMenu = { id: 'editing', title: 'Editing', icon: '$(edit)' };
++		ribbonRegistry.setTabs([contribution({
++			groups: [{
++				id: 'responsive-menu',
++				title: 'Responsive menu',
++				items: [
++					{ command: 'test.ribbon.cut', title: 'Cut', icon: '$(cut)', responsiveMenu },
++					{ command: 'test.ribbon.copy', title: 'Copy', icon: '$(copy)', responsiveMenu },
++				],
++			}],
++		})]);
++		createPart();
++
++		const viewport = fixture.querySelector<HTMLElement>('.ribbon-scroll-viewport')!;
++		const groups = fixture.querySelector<HTMLElement>('.ribbon-groups')!;
++		const menu = fixture.querySelector<HTMLElement>('.ribbon-responsive-menu')!;
++		const sources = fixture.querySelectorAll<HTMLElement>('[data-responsive-menu-source]');
++		Object.defineProperty(viewport, 'clientWidth', { configurable: true, value: 160 });
++		Object.defineProperty(groups, 'scrollWidth', {
++			configurable: true,
++			get: () => menu.hidden ? 260 : 140,
++		});
++		mainWindow.dispatchEvent(new mainWindow.Event('resize'));
++
++		assert.strictEqual(menu.hidden, false);
++		assert.strictEqual(Array.from(sources).every(source => source.hidden), true);
++		assert.strictEqual(groups.querySelectorAll('.ribbon-group.folded').length, 0);
++	});
++
++	test('applies declared responsive layouts before folding a group', () => {
++		ribbonRegistry.setTabs([contribution({
++			groups: [{
++				id: 'responsive',
++				title: 'Responsive',
++				items: [{
++					command: 'test.ribbon.save',
++					title: 'Save',
++					icon: '$(save)',
++					responsive: [
++						{ size: 'half' },
++						{ size: 'third' },
++						{ size: 'third', style: 'icon' },
++					],
++				}],
++			}],
++		})]);
++		createPart();
++
++		const viewport = fixture.querySelector<HTMLElement>('.ribbon-scroll-viewport')!;
++		const groups = fixture.querySelector<HTMLElement>('.ribbon-groups')!;
++		const button = fixture.querySelector<HTMLButtonElement>('.ribbon-item[aria-label="Save"]')!;
++		Object.defineProperty(viewport, 'clientWidth', { configurable: true, value: 160 });
++		Object.defineProperty(groups, 'scrollWidth', {
++			configurable: true,
++			get: () => button.classList.contains('ribbon-item-icon-only') ? 140 : 240,
++		});
++		mainWindow.dispatchEvent(new mainWindow.Event('resize'));
++
++		assert.strictEqual(button.className, 'ribbon-item ribbon-item-third ribbon-item-icon-only');
++		assert.strictEqual(groups.querySelectorAll('.ribbon-group.folded').length, 0);
 +	});
 +
 +	test('folds all groups before showing boundary-aware scroll buttons', () => {
