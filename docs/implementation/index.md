@@ -9,7 +9,7 @@
 | `216-build-product-company-name.patch` | Electron 元数据读取 product 公司名与版权 | VSCodemo 品牌适配 |
 | `217-build-win32-inno-publisher.patch` | Windows Inno 安装器读取 product 发布者信息，并把预发布 SemVer 映射为纯数字文件版本 | VSCodemo 品牌适配；避免 Inno 拒绝带连字符的 `VersionInfoVersion` |
 | `218-build-limit-minify-concurrency.patch` | 允许通过 `VSCODE_MINIFY_CONCURRENCY` 限制 minify 阶段的 esbuild 并发 | 防止 Windows hosted runner 在 `vscode-min-prepack` 阶段耗尽内存；不设置全局 `GOMEMLIMIT`，避免拖慢 tsgo |
-| `219-feature-ribbon-part.patch` | 新增全宽 Ribbon Part、折叠交互、内置 File/View/Help 标签、按菜单分隔线生成的命名功能组、`contributes.ribbon` 与回归测试；按钮支持全高、半高、三分之一高及纵向、纯图标、横向图文布局，可组成一至三行；展开内容区高 98px；宽度不足时将全部功能组折叠为下拉菜单，全部折叠后通过按边界显示的悬浮箭头无滚动条滚动 | 本分支唯一功能差异 |
+| `219-feature-ribbon-part.patch` | 新增全宽 Ribbon Part、折叠交互、内置 File/View/Help 标签、按菜单分隔线生成的命名功能组、`contributes.ribbon` 与回归测试；按钮支持全高、半高、三分之一高及纵向、纯图标、横向图文布局，可组成一至三行；支持 Office 风格分割下拉按钮、单体下拉按钮、递归 Ribbon 菜单项，以及在 sandbox iframe 中运行 HTML/CSS/JavaScript 的自定义菜单内容；展开内容区高 98px；宽度不足时将全部功能组折叠为富下拉菜单，全部折叠后通过按边界显示的悬浮箭头无滚动条滚动 | 本分支唯一功能差异 |
 
 ## Ribbon 内部 API 登记
 

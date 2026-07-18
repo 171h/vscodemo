@@ -1,4 +1,4 @@
-Ribbon Part 补丁：在 Banner 之后增加横跨 Workbench 的可折叠功能区，提供 File/View/Help 内置标签、按原菜单分隔线同步的命名分组，以及扩展声明式 contributes.ribbon 标签、分组、命令按钮。
+Ribbon Part 补丁：在 Banner 之后增加横跨 Workbench 的可折叠功能区，提供 File/View/Help 内置标签、按原菜单分隔线同步的命名分组，以及扩展声明式 contributes.ribbon 标签、分组、命令按钮、Office 风格分割/单体下拉按钮与隔离的自定义菜单内容。
 按钮支持全高、半高和三分之一高尺寸，可在同一功能组中形成单行、两行和三行布局；紧凑按钮支持纯图标或左图标右标题样式。
 保留现有 ActivityBar 入口；Ribbon 支持状态记忆、键盘导航、折叠后的临时覆盖层和启动 Splash 尺寸恢复。
 宽度不足时全部功能组折叠为下拉菜单，仍溢出时通过按边界显示的左右悬浮按钮滚动，且不显示横向滚动条。
@@ -259,7 +259,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a5579107146f
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/media/ribbonpart.css
-@@ -0,0 +1,262 @@
+@@ -0,0 +1,371 @@
 +.monaco-workbench .part.ribbon {
 +	background: var(--vscode-editor-background);
 +	color: var(--vscode-foreground);
@@ -285,6 +285,9 @@ index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a557
 +.ribbon-tab,
 +.ribbon-collapse,
 +.ribbon-item,
++.ribbon-dropdown-item,
++.ribbon-dropdown-primary,
++.ribbon-dropdown-trigger,
 +.ribbon-group-dropdown,
 +.ribbon-scroll-button {
 +	border: 0;
@@ -301,6 +304,9 @@ index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a557
 +
 +.ribbon-tab:hover,
 +.ribbon-item:hover:not(:disabled),
++.ribbon-dropdown-item:hover,
++.ribbon-dropdown-primary:hover:not(:disabled),
++.ribbon-dropdown-trigger:hover,
 +.ribbon-collapse:hover,
 +.ribbon-group-dropdown:hover,
 +.ribbon-scroll-button:hover {
@@ -319,6 +325,9 @@ index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a557
 +
 +.ribbon-tab:focus-visible,
 +.ribbon-item:focus-visible,
++.ribbon-dropdown-item:focus-visible,
++.ribbon-dropdown-primary:focus-visible,
++.ribbon-dropdown-trigger:focus-visible,
 +.ribbon-collapse:focus-visible,
 +.ribbon-group-dropdown:focus-visible,
 +.ribbon-scroll-button:focus-visible {
@@ -511,6 +520,106 @@ index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a557
 +	display: none;
 +}
 +
++.ribbon-dropdown-item {
++	display: flex;
++	flex-direction: column;
++	min-width: 68px;
++	max-width: 128px;
++	padding: 0;
++	border-radius: 2px;
++	overflow: hidden;
++}
++
++.ribbon-dropdown-primary,
++.ribbon-dropdown-trigger,
++.ribbon-dropdown-single {
++	display: flex;
++	align-items: center;
++	justify-content: center;
++	width: 100%;
++	padding: 0 6px;
++	cursor: pointer;
++}
++
++.ribbon-dropdown-primary,
++.ribbon-dropdown-single {
++	flex: 1;
++	flex-direction: column;
++}
++
++.ribbon-dropdown-primary .ribbon-item-icon,
++.ribbon-dropdown-single > .ribbon-item-icon {
++	width: 42px;
++	height: 42px;
++	font-size: 40px;
++}
++
++.ribbon-dropdown-primary:disabled {
++	opacity: .45;
++	cursor: default;
++}
++
++.ribbon-dropdown-trigger,
++.ribbon-dropdown-footer {
++	display: flex;
++	align-items: center;
++	justify-content: center;
++	gap: 3px;
++	min-height: 22px;
++}
++
++.ribbon-dropdown-trigger {
++	border-top: 1px solid var(--vscode-panel-border);
++}
++
++.ribbon-dropdown-footer .codicon,
++.ribbon-dropdown-trigger .codicon {
++	font-size: 12px;
++}
++
++.ribbon-item-menu {
++	max-width: min(1200px, calc(100vw - 24px));
++	max-height: min(800px, calc(100vh - 24px));
++	overflow: auto;
++	background: var(--vscode-menu-background);
++	color: var(--vscode-menu-foreground);
++	border: 1px solid var(--vscode-menu-border, var(--vscode-panel-border));
++	box-shadow: 0 4px 10px var(--vscode-widget-shadow);
++}
++
++.ribbon-menu-items {
++	display: flex;
++	flex-direction: column;
++	gap: 2px;
++	padding: 4px;
++}
++
++.ribbon-menu-items > .ribbon-item {
++	min-height: 32px;
++	max-width: none;
++	justify-content: flex-start;
++	flex-direction: row;
++	gap: 6px;
++}
++
++.ribbon-menu-items > .ribbon-item .ribbon-item-icon {
++	width: 22px;
++	height: 22px;
++	font-size: 22px;
++}
++
++.ribbon-menu-items > .ribbon-dropdown-item {
++	min-width: 180px;
++	min-height: 74px;
++}
++
++.ribbon-custom-content {
++	display: block;
++	max-width: 100%;
++	border: 0;
++	background: transparent;
++}
++
 +.ribbon-group-title {
 +	height: 14px;
 +	font-size: 10px;
@@ -527,7 +636,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..0fc45fc6eeca9fb12f5281df2d1a63f00aa5403c
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/ribbonExtensionPoint.ts
-@@ -0,0 +1,225 @@
+@@ -0,0 +1,277 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -547,11 +656,28 @@ index 0000000000000000000000000000000000000000..0fc45fc6eeca9fb12f5281df2d1a63f0
 +
 +export type RibbonItemSize = 'full' | 'half' | 'third';
 +export type RibbonItemStyle = 'icon' | 'iconAndLabel';
++export type RibbonItemType = 'button' | 'splitButton' | 'dropdown';
++
++export interface IRibbonCustomContentContribution {
++	readonly html: string;
++	readonly css?: string;
++	readonly javascript?: string;
++	readonly commands?: readonly string[];
++	readonly width?: number;
++	readonly height?: number;
++}
++
++export interface IRibbonMenuContribution {
++	readonly items?: readonly IRibbonItemContribution[];
++	readonly custom?: IRibbonCustomContentContribution;
++}
 +
 +export interface IRibbonItemContribution {
-+	readonly command: string;
++	readonly type?: RibbonItemType;
++	readonly command?: string;
 +	readonly title: string;
 +	readonly icon: string | IRibbonIconPath;
++	readonly menu?: IRibbonMenuContribution;
 +	readonly size?: RibbonItemSize;
 +	readonly style?: RibbonItemStyle;
 +	readonly order?: number;
@@ -629,11 +755,31 @@ index 0000000000000000000000000000000000000000..0fc45fc6eeca9fb12f5281df2d1a63f0
 +	description: localize('ribbon.when', "Condition which must be true to show this Ribbon element."),
 +};
 +
++const ribbonCustomContentSchema: IJSONSchema = {
++	type: 'object',
++	additionalProperties: false,
++	required: ['html'],
++	properties: {
++		html: { type: 'string', description: localize('ribbon.customHtml', "HTML rendered inside an isolated Ribbon menu frame.") },
++		css: { type: 'string', description: localize('ribbon.customCss', "CSS applied only inside the isolated Ribbon menu frame.") },
++		javascript: { type: 'string', description: localize('ribbon.customJavascript', "JavaScript executed only inside the sandboxed Ribbon menu frame.") },
++		commands: { type: 'array', uniqueItems: true, items: { type: 'string' }, description: localize('ribbon.customCommands', "Commands the custom frame may execute through the Ribbon API.") },
++		width: { type: 'number', minimum: 160, maximum: 1200, default: 360 },
++		height: { type: 'number', minimum: 80, maximum: 800, default: 280 },
++	},
++};
++
 +const ribbonItemSchema: IJSONSchema = {
 +	type: 'object',
 +	additionalProperties: false,
-+	required: ['command', 'title', 'icon'],
++	required: ['title', 'icon'],
++	anyOf: [
++		{ required: ['command'], properties: { type: { enum: ['button'] } } },
++		{ required: ['command', 'menu'], properties: { type: { enum: ['splitButton'] } } },
++		{ required: ['menu'], properties: { type: { enum: ['dropdown'] } } },
++	],
 +	properties: {
++		type: { type: 'string', enum: ['button', 'splitButton', 'dropdown'], default: 'button', description: localize('ribbon.itemType', "A command button, an Office-style split button, or a menu-only dropdown button.") },
 +		command: { type: 'string', description: localize('ribbon.command', "Identifier of a command declared in the commands contribution point.") },
 +		title: { type: 'string', description: localize('ribbon.itemTitle', "Human readable label of the Ribbon command.") },
 +		icon: {
@@ -648,6 +794,15 @@ index 0000000000000000000000000000000000000000..0fc45fc6eeca9fb12f5281df2d1a63f0
 +		style: { type: 'string', enum: ['icon', 'iconAndLabel'], default: 'iconAndLabel', description: localize('ribbon.itemStyle', "Compact button content: icon only, or an icon followed by its label. Full-height buttons always place the icon above the label.") },
 +		when: whenProperty,
 +		arguments: { type: 'array', description: localize('ribbon.arguments', "Arguments passed to the command."), items: {} },
++		menu: {
++			type: 'object',
++			additionalProperties: false,
++			minProperties: 1,
++			properties: {
++				items: { type: 'array', minItems: 1, items: { $ref: '#/definitions/ribbonItem' } },
++				custom: ribbonCustomContentSchema,
++			},
++		},
 +	},
 +};
 +
@@ -669,6 +824,7 @@ index 0000000000000000000000000000000000000000..0fc45fc6eeca9fb12f5281df2d1a63f0
 +	type: 'object',
 +	additionalProperties: false,
 +	required: ['tabs'],
++	definitions: { ribbonItem: ribbonItemSchema },
 +	properties: {
 +		tabs: {
 +			type: 'array',
@@ -698,6 +854,11 @@ index 0000000000000000000000000000000000000000..0fc45fc6eeca9fb12f5281df2d1a63f0
 +
 +function orderOf(value: { readonly order?: number }): number {
 +	return typeof value.order === 'number' ? value.order : 0;
++}
++
++function sortItems(items: readonly IRibbonItemContribution[]): IRibbonItemContribution[] {
++	return items.map(item => item.menu?.items ? { ...item, menu: { ...item.menu, items: sortItems(item.menu.items) } } : item)
++		.sort((a, b) => orderOf(a) - orderOf(b) || (a.command ?? a.title).localeCompare(b.command ?? b.title));
 +}
 +
 +ribbonExtensionPoint.setHandler((extensions) => {
@@ -737,7 +898,7 @@ index 0000000000000000000000000000000000000000..0fc45fc6eeca9fb12f5281df2d1a63f0
 +				}
 +				groupIds.add(group.id);
 +				return true;
-+			}).map((group: IRibbonGroupContribution) => ({ ...group, items: [...group.items].sort((a: IRibbonItemContribution, b: IRibbonItemContribution) => orderOf(a) - orderOf(b) || a.command.localeCompare(b.command)) }))
++			}).map((group: IRibbonGroupContribution) => ({ ...group, items: sortItems(group.items) }))
 +				.sort((a: IRibbonGroupContribution, b: IRibbonGroupContribution) => orderOf(a) - orderOf(b) || a.id.localeCompare(b.id));
 +
 +			tabIds.add(tab.id);
@@ -758,7 +919,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f53279a98c1e4
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/ribbonPart.ts
-@@ -0,0 +1,606 @@
+@@ -0,0 +1,733 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -767,7 +928,7 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +import './media/ribbonpart.css';
 +import { $, addDisposableListener, append, clearNode, EventType, getWindow, isAncestor } from '../../../../base/browser/dom.js';
 +import { asCSSUrl } from '../../../../base/browser/cssValue.js';
-+import { Action, IAction, SubmenuAction } from '../../../../base/common/actions.js';
++import { IAction, SubmenuAction } from '../../../../base/common/actions.js';
 +import { Codicon } from '../../../../base/common/codicons.js';
 +import { mnemonicButtonLabel } from '../../../../base/common/labels.js';
 +import { DisposableStore } from '../../../../base/common/lifecycle.js';
@@ -786,7 +947,7 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +import { IThemeService } from '../../../../platform/theme/common/themeService.js';
 +import { Part } from '../../part.js';
 +import { IWorkbenchLayoutService, Parts } from '../../../services/layout/browser/layoutService.js';
-+import { IRegisteredRibbonTab, IRibbonGroupContribution, IRibbonItemContribution, RibbonBuiltinTabId, RibbonItemSize, RibbonItemStyle, ribbonRegistry } from './ribbonExtensionPoint.js';
++import { IRegisteredRibbonTab, IRibbonCustomContentContribution, IRibbonGroupContribution, IRibbonItemContribution, IRibbonMenuContribution, RibbonBuiltinTabId, RibbonItemSize, RibbonItemStyle, ribbonRegistry } from './ribbonExtensionPoint.js';
 +import { IRibbonService } from './ribbonService.js';
 +
 +const EXPANDED_HEIGHT = 130;
@@ -969,10 +1130,19 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +			this.addContextKeys(ContextKeyExpr.deserialize(tab.when));
 +			for (const group of tab.groups) {
 +				this.addContextKeys(ContextKeyExpr.deserialize(group.when));
-+				for (const item of group.items) {
++				this.visitContributionItems(group.items, item => {
 +					this.addContextKeys(ContextKeyExpr.deserialize(item.when));
-+					this.addContextKeys(MenuRegistry.getCommand(item.command)?.precondition);
-+				}
++					this.addContextKeys(item.command ? MenuRegistry.getCommand(item.command)?.precondition : undefined);
++				});
++			}
++		}
++	}
++
++	private visitContributionItems(items: readonly IRibbonItemContribution[], visitor: (item: IRibbonItemContribution) => void): void {
++		for (const item of items) {
++			visitor(item);
++			if (item.menu?.items) {
++				this.visitContributionItems(item.menu.items, visitor);
 +			}
 +		}
 +	}
@@ -1222,12 +1392,7 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +		group.setAttribute('aria-label', contribution.title);
 +		collapsibleGroups.push(group);
 +		const items = append(group, $('.ribbon-items'));
-+		const dropdownActions = contribution.items.filter(item => this.matches(item.when)).map(item => {
-+			const command = MenuRegistry.getCommand(item.command);
-+			const enabled = !command?.precondition || this.contextKeyService.contextMatchesRules(command.precondition);
-+			return store.add(new Action(item.command, item.title, undefined, enabled, async () => { await this.commandService.executeCommand(item.command, ...(item.arguments ?? [])); }));
-+		});
-+		this.renderGroupDropdown(group, contribution.title, dropdownActions, store);
++		this.renderContributionGroupDropdown(group, tab, contribution, store);
 +		let firstFocusableButton: HTMLButtonElement | undefined;
 +		for (const item of contribution.items.filter(item => this.matches(item.when))) {
 +			const button = this.renderContributionItem(items, tab, item, closeAfterRun, store);
@@ -1237,6 +1402,17 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +		}
 +		append(group, $('div.ribbon-group-title')).textContent = contribution.title;
 +		return firstFocusableButton;
++	}
++
++	private renderContributionGroupDropdown(parent: HTMLElement, tab: IRegisteredRibbonTab, contribution: IRibbonGroupContribution, store: DisposableStore): void {
++		const button = append(parent, $('button.ribbon-group-dropdown'));
++		button.type = 'button';
++		button.setAttribute('aria-label', localize('ribbon.openGroup', "Open {0} menu", contribution.title));
++		append(button, $('span.ribbon-group-dropdown-label')).textContent = contribution.title;
++		append(button, $('.codicon.codicon-chevron-down'));
++		store.add(addDisposableListener(button, EventType.CLICK, () => {
++			this.showContributionMenu(button, tab, { items: contribution.items });
++		}));
 +	}
 +
 +	private renderGroupDropdown(parent: HTMLElement, title: string, actions: readonly IAction[], store: DisposableStore): void {
@@ -1294,9 +1470,71 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +	}
 +
 +	private renderContributionItem(parent: HTMLElement, tab: IRegisteredRibbonTab, item: IRibbonItemContribution, closeAfterRun: boolean, store: DisposableStore): HTMLButtonElement {
-+		const command = MenuRegistry.getCommand(item.command);
-+		const enabled = !command?.precondition || this.contextKeyService.contextMatchesRules(command.precondition);
-+		const { button, icon } = this.createButton(parent, item.title, undefined, enabled, item.size, item.style);
++		const type = item.type ?? 'button';
++		const enabled = this.isContributionCommandEnabled(item.command);
++		if (type === 'button') {
++			const { button, icon } = this.createButton(parent, item.title, undefined, enabled, item.size, item.style);
++			this.renderContributionIcon(icon, tab, item);
++			store.add(addDisposableListener(button, EventType.CLICK, () => this.runContributionCommand(item, closeAfterRun)));
++			return button;
++		}
++
++		if (type === 'splitButton') {
++			const split = append(parent, $('.ribbon-dropdown-item.ribbon-item-full'));
++			split.setAttribute('role', 'group');
++			split.setAttribute('aria-label', item.title);
++			const primary = append(split, $<HTMLButtonElement>('button.ribbon-dropdown-primary'));
++			primary.type = 'button';
++			primary.disabled = !enabled;
++			primary.setAttribute('aria-label', localize('ribbon.runCommand', "Run {0}", item.title));
++			this.renderContributionIcon(append(primary, $('.ribbon-item-icon')), tab, item);
++			const trigger = this.createDropdownTrigger(split, item.title);
++			store.add(addDisposableListener(primary, EventType.CLICK, () => this.runContributionCommand(item, closeAfterRun)));
++			store.add(addDisposableListener(trigger, EventType.CLICK, () => this.showContributionMenu(trigger, tab, item.menu)));
++			return enabled ? primary : trigger;
++		}
++
++		const button = append(parent, $<HTMLButtonElement>('button.ribbon-dropdown-item.ribbon-item-full.ribbon-dropdown-single'));
++		button.type = 'button';
++		button.setAttribute('aria-label', localize('ribbon.openItemMenu', "Open {0} menu", item.title));
++		button.setAttribute('aria-haspopup', 'dialog');
++		this.renderContributionIcon(append(button, $('.ribbon-item-icon')), tab, item);
++		const footer = append(button, $('.ribbon-dropdown-footer'));
++		append(footer, $('span.ribbon-item-label')).textContent = item.title;
++		append(footer, $('.codicon.codicon-chevron-down'));
++		store.add(addDisposableListener(button, EventType.CLICK, () => this.showContributionMenu(button, tab, item.menu)));
++		return button;
++	}
++
++	private createDropdownTrigger(parent: HTMLElement, title: string): HTMLButtonElement {
++		const trigger = append(parent, $<HTMLButtonElement>('button.ribbon-dropdown-trigger'));
++		trigger.type = 'button';
++		trigger.setAttribute('aria-label', localize('ribbon.openItemMenu', "Open {0} menu", title));
++		trigger.setAttribute('aria-haspopup', 'dialog');
++		append(trigger, $('span.ribbon-item-label')).textContent = title;
++		append(trigger, $('.codicon.codicon-chevron-down'));
++		return trigger;
++	}
++
++	private isContributionCommandEnabled(commandId: string | undefined): boolean {
++		if (!commandId) {
++			return false;
++		}
++		const command = MenuRegistry.getCommand(commandId);
++		return !command?.precondition || this.contextKeyService.contextMatchesRules(command.precondition);
++	}
++
++	private runContributionCommand(item: IRibbonItemContribution, closeAfterRun: boolean): void {
++		if (!item.command) {
++			return;
++		}
++		void this.commandService.executeCommand(item.command, ...(item.arguments ?? [])).catch(error => this.notificationService.error(error));
++		if (closeAfterRun) {
++			this.contextViewService.hideContextView();
++		}
++	}
++
++	private renderContributionIcon(icon: HTMLElement, tab: IRegisteredRibbonTab, item: IRibbonItemContribution): void {
 +		const iconValue = typeof item.icon === 'string' ? item.icon : isDark(this.themeService.getColorTheme().type) ? item.icon.dark : item.icon.light;
 +		const themeIcon = ThemeIcon.fromString(iconValue);
 +		if (themeIcon) {
@@ -1305,13 +1543,63 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +			icon.style.backgroundImage = asCSSUrl(resources.joinPath(tab.extensionLocation, iconValue));
 +			icon.classList.add('ribbon-file-icon');
 +		}
-+		store.add(addDisposableListener(button, EventType.CLICK, () => {
-+			void this.commandService.executeCommand(item.command, ...(item.arguments ?? [])).catch(error => this.notificationService.error(error));
-+			if (closeAfterRun) {
++	}
++
++	private showContributionMenu(anchor: HTMLElement, tab: IRegisteredRibbonTab, menu: IRibbonMenuContribution | undefined): void {
++		if (!menu) {
++			return;
++		}
++		let firstFocusableElement: HTMLElement | undefined;
++		this.contextViewService.showContextView({
++			getAnchor: () => anchor,
++			render: container => {
++				container.classList.add('ribbon-item-menu');
++				const menuStore = new DisposableStore();
++				if (menu.items?.length) {
++					const items = append(container, $('.ribbon-menu-items'));
++					for (const item of menu.items.filter(candidate => this.matches(candidate.when))) {
++						const button = this.renderContributionItem(items, tab, item, true, menuStore);
++						if (!button.disabled) {
++							firstFocusableElement ??= button;
++						}
++					}
++				}
++				if (menu.custom) {
++					firstFocusableElement ??= this.renderCustomMenuContent(container, menu.custom, menuStore);
++				}
++				return menuStore;
++			},
++			focus: () => firstFocusableElement?.focus(),
++		});
++	}
++
++	private renderCustomMenuContent(parent: HTMLElement, content: IRibbonCustomContentContribution, store: DisposableStore): HTMLIFrameElement {
++		const frame = append(parent, $<HTMLIFrameElement>('iframe.ribbon-custom-content'));
++		frame.title = localize('ribbon.customContent', "Custom Ribbon menu content");
++		frame.setAttribute('sandbox', 'allow-scripts');
++		frame.style.width = `${content.width ?? 360}px`;
++		frame.style.height = `${content.height ?? 280}px`;
++		frame.srcdoc = this.customFrameSource(content);
++		const allowedCommands = new Set(content.commands ?? []);
++		store.add(addDisposableListener(getWindow(parent), 'message', (event: MessageEvent) => {
++			if (event.source !== frame.contentWindow || !event.data || typeof event.data !== 'object') {
++				return;
++			}
++			if (event.data.type === 'ribbon.close') {
 +				this.contextViewService.hideContextView();
++			} else if (event.data.type === 'ribbon.executeCommand' && typeof event.data.command === 'string' && allowedCommands.has(event.data.command)) {
++				const args = Array.isArray(event.data.arguments) ? event.data.arguments : [];
++				void this.commandService.executeCommand(event.data.command, ...args).catch(error => this.notificationService.error(error));
 +			}
 +		}));
-+		return button;
++		return frame;
++	}
++
++	private customFrameSource(content: IRibbonCustomContentContribution): string {
++		const css = (content.css ?? '').replace(/<\/style/gi, '<\\/style');
++		const javascript = (content.javascript ?? '').replace(/<\/script/gi, '<\\/script');
++		const bridge = `globalThis.acquireRibbonApi=()=>Object.freeze({executeCommand:(command,...args)=>parent.postMessage({type:'ribbon.executeCommand',command,arguments:args},'*'),close:()=>parent.postMessage({type:'ribbon.close'},'*')});addEventListener('keydown',event=>{if(event.key==='Escape')parent.postMessage({type:'ribbon.close'},'*')});`;
++		return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; font-src data:"><style>html,body{box-sizing:border-box;margin:0;min-height:100%;font:13px sans-serif}${css}</style></head><body>${content.html}<script>${bridge}<\/script><script>${javascript}<\/script></body></html>`;
 +	}
 +
 +	private createButton(parent: HTMLElement, label: string, iconClass: string | undefined, enabled: boolean, size: RibbonItemSize = 'full', style: RibbonItemStyle = 'iconAndLabel'): { button: HTMLButtonElement; icon: HTMLElement } {
@@ -1425,7 +1713,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..a0f49739c6fa0656f1fb391730c09e7869a331d5
 --- /dev/null
 +++ b/src/vs/workbench/test/browser/parts/ribbon/ribbonPart.test.ts
-@@ -0,0 +1,332 @@
+@@ -0,0 +1,390 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -1487,7 +1775,7 @@ index 0000000000000000000000000000000000000000..a0f49739c6fa0656f1fb391730c09e78
 +		};
 +	}
 +
-+	function createPart(themeService = new TestThemeService(), contextKeyService = disposables.add(new ContextKeyService(new TestConfigurationService())), menuActions: readonly IAction[] = [], contextViewService = {} as IContextViewService, menuGroups?: readonly (readonly [string, readonly IAction[]])[]): RibbonPart {
++	function createPart(themeService = new TestThemeService(), contextKeyService = disposables.add(new ContextKeyService(new TestConfigurationService())), menuActions: readonly IAction[] = [], contextViewService = {} as IContextViewService, menuGroups?: readonly (readonly [string, readonly IAction[]])[], commandService = {} as ICommandService): RibbonPart {
 +		const menuService = {
 +			createMenu: () => ({
 +				onDidChange: Event.None,
@@ -1501,7 +1789,7 @@ index 0000000000000000000000000000000000000000..a0f49739c6fa0656f1fb391730c09e78
 +			new TestLayoutService(),
 +			contextKeyService,
 +			menuService,
-+			{} as ICommandService,
++			commandService,
 +			{} as IContextMenuService,
 +			contextViewService,
 +			{} as INotificationService,
@@ -1641,6 +1929,64 @@ index 0000000000000000000000000000000000000000..a0f49739c6fa0656f1fb391730c09e78
 +		assert.strictEqual(buttons.get('Half label')?.className, 'ribbon-item ribbon-item-half ribbon-item-horizontal');
 +		assert.strictEqual(buttons.get('Third icon')?.className, 'ribbon-item ribbon-item-third ribbon-item-icon-only');
 +		assert.strictEqual(buttons.get('Third label')?.className, 'ribbon-item ribbon-item-third ribbon-item-horizontal');
++	});
++
++	test('renders split and menu-only dropdowns and keeps their click targets separate', () => {
++		const popup = mainWindow.document.createElement('div');
++		fixture.append(popup);
++		let renderDisposable: IDisposable | undefined;
++		const contextViewService = {
++			showContextView: (delegate: IContextViewDelegate) => {
++				renderDisposable?.dispose();
++				popup.replaceChildren();
++				renderDisposable = delegate.render(popup);
++				delegate.focus?.();
++				return { close: () => renderDisposable?.dispose() };
++			},
++			hideContextView: () => renderDisposable?.dispose(),
++		} as unknown as IContextViewService;
++		const executed: string[] = [];
++		const commandService = {
++			executeCommand: async (command: string) => { executed.push(command); },
++		} as unknown as ICommandService;
++		ribbonRegistry.setTabs([contribution({
++			groups: [{
++				id: 'dropdowns',
++				title: 'Dropdowns',
++				items: [
++					{
++						type: 'splitButton',
++						command: 'test.ribbon.run',
++						title: 'Run',
++						icon: '$(play)',
++						menu: { items: [{ command: 'test.ribbon.option', title: 'Option', icon: '$(list-selection)' }] },
++					},
++					{
++						type: 'dropdown',
++						title: 'More',
++						icon: '$(tools)',
++						menu: { custom: { html: '<button id="custom">Custom</button>', javascript: 'document.body.dataset.ready="true"' } },
++					},
++				],
++			}],
++		})]);
++		createPart(undefined, undefined, [], contextViewService, undefined, commandService);
++
++		const split = fixture.querySelector<HTMLElement>('.ribbon-dropdown-item:not(.ribbon-dropdown-single)')!;
++		const primary = split.querySelector<HTMLButtonElement>('.ribbon-dropdown-primary')!;
++		const trigger = split.querySelector<HTMLButtonElement>('.ribbon-dropdown-trigger')!;
++		primary.click();
++		assert.deepStrictEqual(executed, ['test.ribbon.run']);
++		assert.strictEqual(popup.childElementCount, 0);
++
++		trigger.click();
++		assert.strictEqual(popup.querySelector('.ribbon-item')?.getAttribute('aria-label'), 'Option');
++
++		fixture.querySelector<HTMLButtonElement>('.ribbon-dropdown-single')!.click();
++		const frame = popup.querySelector<HTMLIFrameElement>('.ribbon-custom-content')!;
++		assert.strictEqual(frame.getAttribute('sandbox'), 'allow-scripts');
++		assert.match(frame.srcdoc, /acquireRibbonApi/);
++		assert.match(frame.srcdoc, /id="custom"/);
 +	});
 +
 +	test('folds all groups before showing boundary-aware scroll buttons', () => {
