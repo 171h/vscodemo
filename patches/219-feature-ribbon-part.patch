@@ -326,7 +326,7 @@ index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a557
 +
 +.ribbon-content,
 +.ribbon-overlay {
-+	height: 72px;
++	height: 98px;
 +	box-sizing: border-box;
 +	overflow-x: auto;
 +	overflow-y: hidden;
@@ -357,7 +357,7 @@ index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a557
 +	display: flex;
 +	align-items: stretch;
 +	gap: 2px;
-+	height: 48px;
++	height: 74px;
 +}
 +
 +.ribbon-item {
@@ -383,9 +383,9 @@ index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a557
 +}
 +
 +.ribbon-item-icon {
-+	width: 20px;
-+	height: 20px;
-+	font-size: 18px;
++	width: 46px;
++	height: 46px;
++	font-size: 44px;
 +	background-position: center;
 +	background-repeat: no-repeat;
 +	background-size: contain;
@@ -672,7 +672,7 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +import { IRegisteredRibbonTab, IRibbonGroupContribution, IRibbonItemContribution, RibbonBuiltinTabId, ribbonRegistry } from './ribbonExtensionPoint.js';
 +import { IRibbonService } from './ribbonService.js';
 +
-+const EXPANDED_HEIGHT = 104;
++const EXPANDED_HEIGHT = 130;
 +const COLLAPSED_HEIGHT = 32;
 +const STORAGE_COLLAPSED = 'workbench.ribbon.collapsed';
 +const STORAGE_ACTIVE_TAB = 'workbench.ribbon.activeTab';
