@@ -256,10 +256,10 @@ index 3480283a2177b0833bc5a497c746aa311b79a6f8..b02fbc4e7a82f2216d47392dd8bc1b57
  						data: middleSection,
 diff --git a/src/vs/workbench/browser/parts/ribbon/media/ribbonpart.css b/src/vs/workbench/browser/parts/ribbon/media/ribbonpart.css
 new file mode 100644
-index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a5579107146f
+index 0000000000000000000000000000000000000000..c4a91275e96609ad8a3ad868e98eea5d23a31dce
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/media/ribbonpart.css
-@@ -0,0 +1,371 @@
+@@ -0,0 +1,385 @@
 +.monaco-workbench .part.ribbon {
 +	background: var(--vscode-editor-background);
 +	color: var(--vscode-foreground);
@@ -289,6 +289,7 @@ index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a557
 +.ribbon-dropdown-primary,
 +.ribbon-dropdown-trigger,
 +.ribbon-group-dropdown,
++.ribbon-menu-back,
 +.ribbon-scroll-button {
 +	border: 0;
 +	color: inherit;
@@ -309,6 +310,7 @@ index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a557
 +.ribbon-dropdown-trigger:hover,
 +.ribbon-collapse:hover,
 +.ribbon-group-dropdown:hover,
++.ribbon-menu-back:hover,
 +.ribbon-scroll-button:hover {
 +	background: var(--vscode-toolbar-hoverBackground);
 +}
@@ -330,6 +332,7 @@ index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a557
 +.ribbon-dropdown-trigger:focus-visible,
 +.ribbon-collapse:focus-visible,
 +.ribbon-group-dropdown:focus-visible,
++.ribbon-menu-back:focus-visible,
 +.ribbon-scroll-button:focus-visible {
 +	outline: 1px solid var(--vscode-focusBorder);
 +	outline-offset: -1px;
@@ -587,6 +590,17 @@ index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a557
 +	box-shadow: 0 4px 10px var(--vscode-widget-shadow);
 +}
 +
++.ribbon-menu-back {
++	display: flex;
++	align-items: center;
++	gap: 6px;
++	width: 100%;
++	min-height: 30px;
++	padding: 4px 8px;
++	cursor: pointer;
++	border-bottom: 1px solid var(--vscode-menu-separatorBackground);
++}
++
 +.ribbon-menu-items {
 +	display: flex;
 +	flex-direction: column;
@@ -633,10 +647,10 @@ index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a557
 +}
 diff --git a/src/vs/workbench/browser/parts/ribbon/ribbonExtensionPoint.ts b/src/vs/workbench/browser/parts/ribbon/ribbonExtensionPoint.ts
 new file mode 100644
-index 0000000000000000000000000000000000000000..0fc45fc6eeca9fb12f5281df2d1a63f00aa5403c
+index 0000000000000000000000000000000000000000..4bfd0e2efdcee3c23d28bf2ef620ecf87766d6d5
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/ribbonExtensionPoint.ts
-@@ -0,0 +1,319 @@
+@@ -0,0 +1,315 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -672,8 +686,6 @@ index 0000000000000000000000000000000000000000..0fc45fc6eeca9fb12f5281df2d1a63f0
 +export interface IRibbonCustomContentContribution {
 +	readonly html: string;
 +	readonly css?: string;
-+	readonly javascript?: string;
-+	readonly commands?: readonly string[];
 +	readonly width?: number;
 +	readonly height?: number;
 +}
@@ -775,8 +787,6 @@ index 0000000000000000000000000000000000000000..0fc45fc6eeca9fb12f5281df2d1a63f0
 +	properties: {
 +		html: { type: 'string', description: localize('ribbon.customHtml', "HTML rendered inside an isolated Ribbon menu frame.") },
 +		css: { type: 'string', description: localize('ribbon.customCss', "CSS applied only inside the isolated Ribbon menu frame.") },
-+		javascript: { type: 'string', description: localize('ribbon.customJavascript', "JavaScript executed only inside the sandboxed Ribbon menu frame.") },
-+		commands: { type: 'array', uniqueItems: true, items: { type: 'string' }, description: localize('ribbon.customCommands', "Commands the custom frame may execute through the Ribbon API.") },
 +		width: { type: 'number', minimum: 160, maximum: 1200, default: 360 },
 +		height: { type: 'number', minimum: 80, maximum: 800, default: 280 },
 +	},
@@ -786,10 +796,10 @@ index 0000000000000000000000000000000000000000..0fc45fc6eeca9fb12f5281df2d1a63f0
 +	type: 'object',
 +	additionalProperties: false,
 +	required: ['title', 'icon'],
-+	anyOf: [
-+		{ required: ['command'], properties: { type: { enum: ['button'] } } },
-+		{ required: ['command', 'menu'], properties: { type: { enum: ['splitButton'] } } },
-+		{ required: ['menu'], properties: { type: { enum: ['dropdown'] } } },
++	oneOf: [
++		{ required: ['command'], not: { required: ['menu'] }, properties: { type: { enum: ['button'] } } },
++		{ required: ['type', 'command', 'menu'], properties: { type: { enum: ['splitButton'] } } },
++		{ required: ['type', 'menu'], not: { required: ['command'] }, properties: { type: { enum: ['dropdown'] } } },
 +	],
 +	properties: {
 +		type: { type: 'string', enum: ['button', 'splitButton', 'dropdown'], default: 'button', description: localize('ribbon.itemType', "A command button, an Office-style split button, or a menu-only dropdown button.") },
@@ -958,10 +968,10 @@ index 0000000000000000000000000000000000000000..0fc45fc6eeca9fb12f5281df2d1a63f0
 +});
 diff --git a/src/vs/workbench/browser/parts/ribbon/ribbonPart.ts b/src/vs/workbench/browser/parts/ribbon/ribbonPart.ts
 new file mode 100644
-index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f53279a98c1e4
+index 0000000000000000000000000000000000000000..81298f744b982cdd64078743a54f6fb1251fc864
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/ribbonPart.ts
-@@ -0,0 +1,820 @@
+@@ -0,0 +1,846 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -1584,9 +1594,20 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +		fit();
 +	}
 +
-+	private renderContributionItem(parent: HTMLElement, tab: IRegisteredRibbonTab, item: IRibbonItemContribution, closeAfterRun: boolean, store: DisposableStore): HTMLButtonElement {
++	private renderContributionItem(parent: HTMLElement, tab: IRegisteredRibbonTab, item: IRibbonItemContribution, closeAfterRun: boolean, store: DisposableStore, openNestedMenu?: (menu: IRibbonMenuContribution) => void): HTMLButtonElement {
 +		const type = item.type ?? 'button';
 +		const enabled = this.isContributionCommandEnabled(item.command);
++		const openMenu = (anchor: HTMLElement) => {
++			if (!item.menu) {
++				return;
++			}
++			if (openNestedMenu) {
++				openNestedMenu(item.menu);
++			} else {
++				this.showContributionMenu(anchor, tab, item.menu);
++			}
++		};
++
 +		if (type === 'button') {
 +			const { button, icon } = this.createButton(parent, item.title, undefined, enabled, item.size, item.style, item.responsive);
 +			this.renderContributionIcon(icon, tab, item);
@@ -1605,7 +1626,7 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +			this.renderContributionIcon(append(primary, $('.ribbon-item-icon')), tab, item);
 +			const trigger = this.createDropdownTrigger(split, item.title);
 +			store.add(addDisposableListener(primary, EventType.CLICK, () => this.runContributionCommand(item, closeAfterRun)));
-+			store.add(addDisposableListener(trigger, EventType.CLICK, () => this.showContributionMenu(trigger, tab, item.menu)));
++			store.add(addDisposableListener(trigger, EventType.CLICK, () => openMenu(trigger)));
 +			return enabled ? primary : trigger;
 +		}
 +
@@ -1617,7 +1638,7 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +		const footer = append(button, $('.ribbon-dropdown-footer'));
 +		append(footer, $('span.ribbon-item-label')).textContent = item.title;
 +		append(footer, $('.codicon.codicon-chevron-down'));
-+		store.add(addDisposableListener(button, EventType.CLICK, () => this.showContributionMenu(button, tab, item.menu)));
++		store.add(addDisposableListener(button, EventType.CLICK, () => openMenu(button)));
 +		return button;
 +	}
 +
@@ -1665,56 +1686,71 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +			return;
 +		}
 +		let firstFocusableElement: HTMLElement | undefined;
++		const menuStack: IRibbonMenuContribution[] = [menu];
 +		this.contextViewService.showContextView({
 +			getAnchor: () => anchor,
 +			render: container => {
 +				container.classList.add('ribbon-item-menu');
 +				const menuStore = new DisposableStore();
-+				if (menu.items?.length) {
-+					const items = append(container, $('.ribbon-menu-items'));
-+					for (const item of menu.items.filter(candidate => this.matches(candidate.when))) {
-+						const button = this.renderContributionItem(items, tab, item, true, menuStore);
-+						if (!button.disabled) {
-+							firstFocusableElement ??= button;
++				const contentStore = menuStore.add(new DisposableStore());
++				const renderCurrentMenu = (focus: boolean) => {
++					contentStore.clear();
++					clearNode(container);
++					firstFocusableElement = undefined;
++
++					if (menuStack.length > 1) {
++						const backButton = append(container, $<HTMLButtonElement>('button.ribbon-menu-back'));
++						backButton.type = 'button';
++						backButton.setAttribute('aria-label', localize('ribbon.menuBack', "Back to previous Ribbon menu"));
++						append(backButton, $('.codicon.codicon-arrow-left'));
++						append(backButton, $('span')).textContent = localize('ribbon.menuBackLabel', "Back");
++						contentStore.add(addDisposableListener(backButton, EventType.CLICK, () => {
++							menuStack.pop();
++							renderCurrentMenu(true);
++						}));
++						firstFocusableElement = backButton;
++					}
++
++					const currentMenu = menuStack[menuStack.length - 1];
++					if (currentMenu.items?.length) {
++						const items = append(container, $('.ribbon-menu-items'));
++						for (const item of currentMenu.items.filter(candidate => this.matches(candidate.when))) {
++							const button = this.renderContributionItem(items, tab, item, true, contentStore, nestedMenu => {
++								menuStack.push(nestedMenu);
++								renderCurrentMenu(true);
++							});
++							if (!button.disabled) {
++								firstFocusableElement ??= button;
++							}
 +						}
 +					}
-+				}
-+				if (menu.custom) {
-+					firstFocusableElement ??= this.renderCustomMenuContent(container, menu.custom, menuStore);
-+				}
++					if (currentMenu.custom) {
++						firstFocusableElement ??= this.renderCustomMenuContent(container, currentMenu.custom);
++					}
++					if (focus) {
++						firstFocusableElement?.focus();
++					}
++				};
++				renderCurrentMenu(false);
 +				return menuStore;
 +			},
 +			focus: () => firstFocusableElement?.focus(),
 +		});
 +	}
 +
-+	private renderCustomMenuContent(parent: HTMLElement, content: IRibbonCustomContentContribution, store: DisposableStore): HTMLIFrameElement {
++	private renderCustomMenuContent(parent: HTMLElement, content: IRibbonCustomContentContribution): HTMLIFrameElement {
 +		const frame = append(parent, $<HTMLIFrameElement>('iframe.ribbon-custom-content'));
 +		frame.title = localize('ribbon.customContent', "Custom Ribbon menu content");
-+		frame.setAttribute('sandbox', 'allow-scripts');
++		frame.setAttribute('sandbox', '');
 +		frame.style.width = `${content.width ?? 360}px`;
 +		frame.style.height = `${content.height ?? 280}px`;
 +		frame.srcdoc = this.customFrameSource(content);
-+		const allowedCommands = new Set(content.commands ?? []);
-+		store.add(addDisposableListener(getWindow(parent), 'message', (event: MessageEvent) => {
-+			if (event.source !== frame.contentWindow || !event.data || typeof event.data !== 'object') {
-+				return;
-+			}
-+			if (event.data.type === 'ribbon.close') {
-+				this.contextViewService.hideContextView();
-+			} else if (event.data.type === 'ribbon.executeCommand' && typeof event.data.command === 'string' && allowedCommands.has(event.data.command)) {
-+				const args = Array.isArray(event.data.arguments) ? event.data.arguments : [];
-+				void this.commandService.executeCommand(event.data.command, ...args).catch(error => this.notificationService.error(error));
-+			}
-+		}));
 +		return frame;
 +	}
 +
 +	private customFrameSource(content: IRibbonCustomContentContribution): string {
 +		const css = (content.css ?? '').replace(/<\/style/gi, '<\\/style');
-+		const javascript = (content.javascript ?? '').replace(/<\/script/gi, '<\\/script');
-+		const bridge = `globalThis.acquireRibbonApi=()=>Object.freeze({executeCommand:(command,...args)=>parent.postMessage({type:'ribbon.executeCommand',command,arguments:args},'*'),close:()=>parent.postMessage({type:'ribbon.close'},'*')});addEventListener('keydown',event=>{if(event.key==='Escape')parent.postMessage({type:'ribbon.close'},'*')});`;
-+		return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; font-src data:"><style>html,body{box-sizing:border-box;margin:0;min-height:100%;font:13px sans-serif}${css}</style></head><body>${content.html}<script>${bridge}<\/script><script>${javascript}<\/script></body></html>`;
++		return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'none'; font-src data:"><style>html,body{box-sizing:border-box;margin:0;min-height:100%;font:13px sans-serif}${css}</style></head><body>${content.html}</body></html>`;
 +	}
 +
 +	private createButton(parent: HTMLElement, label: string, iconClass: string | undefined, enabled: boolean, size: RibbonItemSize = 'full', style: RibbonItemStyle = 'iconAndLabel', responsive: readonly IRibbonResponsiveLayoutContribution[] = []): { button: HTMLButtonElement; icon: HTMLElement } {
@@ -1839,10 +1875,10 @@ index 46243a4447e57276aa01b085ad35cbb5212b98cc..3ffe5e2f01ea7685b9c3d45a62c8ac8a
  	PANEL_PART = 'workbench.parts.panel',
 diff --git a/src/vs/workbench/test/browser/parts/ribbon/ribbonPart.test.ts b/src/vs/workbench/test/browser/parts/ribbon/ribbonPart.test.ts
 new file mode 100644
-index 0000000000000000000000000000000000000000..a0f49739c6fa0656f1fb391730c09e7869a331d5
+index 0000000000000000000000000000000000000000..ba5231949bd7f45e5c45a5963d828ef7ee68d137
 --- /dev/null
 +++ b/src/vs/workbench/test/browser/parts/ribbon/ribbonPart.test.ts
-@@ -0,0 +1,453 @@
+@@ -0,0 +1,518 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -2094,7 +2130,7 @@ index 0000000000000000000000000000000000000000..a0f49739c6fa0656f1fb391730c09e78
 +						type: 'dropdown',
 +						title: 'More',
 +						icon: '$(tools)',
-+						menu: { custom: { html: '<button id="custom">Custom</button>', javascript: 'document.body.dataset.ready="true"' } },
++						menu: { custom: { html: '<strong id="custom">Custom</strong>', css: '#custom { color: red }' } },
 +					},
 +				],
 +			}],
@@ -2113,9 +2149,74 @@ index 0000000000000000000000000000000000000000..a0f49739c6fa0656f1fb391730c09e78
 +
 +		fixture.querySelector<HTMLButtonElement>('.ribbon-dropdown-single')!.click();
 +		const frame = popup.querySelector<HTMLIFrameElement>('.ribbon-custom-content')!;
-+		assert.strictEqual(frame.getAttribute('sandbox'), 'allow-scripts');
-+		assert.match(frame.srcdoc, /acquireRibbonApi/);
++		assert.strictEqual(frame.getAttribute('sandbox'), '');
++		assert.match(frame.srcdoc, /script-src 'none'/);
++		assert.doesNotMatch(frame.srcdoc, /<script/i);
 +		assert.match(frame.srcdoc, /id="custom"/);
++	});
++
++	test('navigates nested dropdowns inside one context view and closes after running a command', () => {
++		const popup = mainWindow.document.createElement('div');
++		fixture.append(popup);
++		let renderDisposable: IDisposable | undefined;
++		let showCalls = 0;
++		let hideCalls = 0;
++		const contextViewService = {
++			showContextView: (delegate: IContextViewDelegate) => {
++				showCalls++;
++				renderDisposable?.dispose();
++				popup.replaceChildren();
++				renderDisposable = delegate.render(popup);
++				delegate.focus?.();
++				return { close: () => renderDisposable?.dispose() };
++			},
++			hideContextView: () => {
++				hideCalls++;
++				renderDisposable?.dispose();
++			},
++		} as unknown as IContextViewService;
++		const executed: string[] = [];
++		const commandService = {
++			executeCommand: async (command: string) => { executed.push(command); },
++		} as unknown as ICommandService;
++		ribbonRegistry.setTabs([contribution({
++			groups: [{
++				id: 'nested',
++				title: 'Nested',
++				items: [{
++					type: 'dropdown',
++					title: 'Outer',
++					icon: '$(list-tree)',
++					menu: {
++						items: [{
++							type: 'dropdown',
++							title: 'More',
++							icon: '$(chevron-right)',
++							menu: {
++								items: [{ command: 'test.ribbon.safe', title: 'Safe', icon: '$(shield)' }],
++							},
++						}],
++					},
++				}],
++			}],
++		})]);
++		createPart(undefined, undefined, [], contextViewService, undefined, commandService);
++
++		fixture.querySelector<HTMLButtonElement>('.ribbon-dropdown-single')!.click();
++		assert.strictEqual(showCalls, 1);
++		popup.querySelector<HTMLButtonElement>('.ribbon-dropdown-single')!.click();
++		assert.strictEqual(showCalls, 1);
++		assert.strictEqual(popup.querySelector('.ribbon-menu-back')?.textContent, 'Back');
++		assert.strictEqual(popup.querySelector('.ribbon-item')?.getAttribute('aria-label'), 'Safe');
++
++		popup.querySelector<HTMLButtonElement>('.ribbon-menu-back')!.click();
++		assert.strictEqual(popup.querySelector('.ribbon-dropdown-single')?.getAttribute('aria-label'), 'Open More menu');
++		assert.strictEqual(popup.querySelector('[aria-label="Safe"]'), null);
++
++		popup.querySelector<HTMLButtonElement>('.ribbon-dropdown-single')!.click();
++		popup.querySelector<HTMLButtonElement>('.ribbon-item')!.click();
++		assert.deepStrictEqual(executed, ['test.ribbon.safe']);
++		assert.strictEqual(hideCalls, 1);
 +	});
 +
 +	test('merges related commands into a responsive menu before folding the group', () => {
