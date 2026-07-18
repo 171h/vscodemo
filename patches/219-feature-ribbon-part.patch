@@ -1,4 +1,5 @@
 Ribbon Part 补丁：在 Banner 之后增加横跨 Workbench 的可折叠功能区，提供 File/View/Help 内置标签、按原菜单分隔线同步的命名分组，以及扩展声明式 contributes.ribbon 标签、分组、命令按钮。
+按钮支持全高、半高和三分之一高尺寸，可在同一功能组中形成单行、两行和三行布局；紧凑按钮支持纯图标或左图标右标题样式。
 保留现有 ActivityBar 入口；Ribbon 支持状态记忆、键盘导航、折叠后的临时覆盖层和启动 Splash 尺寸恢复。
 宽度不足时全部功能组折叠为下拉菜单，仍溢出时通过按边界显示的左右悬浮按钮滚动，且不显示横向滚动条。
 
@@ -258,7 +259,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a5579107146f
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/media/ribbonpart.css
-@@ -0,0 +1,214 @@
+@@ -0,0 +1,262 @@
 +.monaco-workbench .part.ribbon {
 +	background: var(--vscode-editor-background);
 +	color: var(--vscode-foreground);
@@ -414,9 +415,12 @@ index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a557
 +	right: 0;
 +}
 +
++/* Six tracks let full, half, and third-height buttons share a group. */
 +.ribbon-items {
-+	display: flex;
-+	align-items: stretch;
++	display: grid;
++	grid-template-rows: repeat(6, minmax(0, 1fr));
++	grid-auto-flow: column;
++	grid-auto-columns: max-content;
 +	gap: 2px;
 +	height: 74px;
 +}
@@ -425,12 +429,40 @@ index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a557
 +	display: flex;
 +	align-items: center;
 +	justify-content: center;
-+	flex-direction: column;
-+	min-width: 62px;
-+	max-width: 118px;
++	min-width: 30px;
++	max-width: 150px;
 +	padding: 2px 6px;
 +	border-radius: 2px;
 +	cursor: pointer;
++}
++
++.ribbon-item-full {
++	grid-row: span 6;
++}
++
++.ribbon-item-half {
++	grid-row: span 3;
++}
++
++.ribbon-item-third {
++	grid-row: span 2;
++}
++
++.ribbon-item-vertical {
++	flex-direction: column;
++	min-width: 62px;
++	max-width: 118px;
++}
++
++.ribbon-item-horizontal {
++	flex-direction: row;
++	justify-content: flex-start;
++	gap: 5px;
++}
++
++.ribbon-item-icon-only {
++	padding-right: 4px;
++	padding-left: 4px;
 +}
 +
 +.ribbon-items.compact .ribbon-item {
@@ -444,12 +476,25 @@ index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a557
 +}
 +
 +.ribbon-item-icon {
-+	width: 46px;
-+	height: 46px;
-+	font-size: 44px;
++	flex: 0 0 auto;
++	width: 18px;
++	height: 18px;
++	font-size: 18px;
 +	background-position: center;
 +	background-repeat: no-repeat;
 +	background-size: contain;
++}
++
++.ribbon-item-full .ribbon-item-icon {
++	width: 46px;
++	height: 46px;
++	font-size: 44px;
++}
++
++.ribbon-item-half .ribbon-item-icon {
++	width: 22px;
++	height: 22px;
++	font-size: 22px;
 +}
 +
 +.ribbon-item-label {
@@ -460,6 +505,10 @@ index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a557
 +	text-align: center;
 +	text-overflow: ellipsis;
 +	white-space: nowrap;
++}
++
++.ribbon-item-icon-only .ribbon-item-label {
++	display: none;
 +}
 +
 +.ribbon-group-title {
@@ -478,7 +527,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..0fc45fc6eeca9fb12f5281df2d1a63f00aa5403c
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/ribbonExtensionPoint.ts
-@@ -0,0 +1,218 @@
+@@ -0,0 +1,225 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -496,10 +545,15 @@ index 0000000000000000000000000000000000000000..0fc45fc6eeca9fb12f5281df2d1a63f0
 +	readonly dark: string;
 +}
 +
++export type RibbonItemSize = 'full' | 'half' | 'third';
++export type RibbonItemStyle = 'icon' | 'iconAndLabel';
++
 +export interface IRibbonItemContribution {
 +	readonly command: string;
 +	readonly title: string;
 +	readonly icon: string | IRibbonIconPath;
++	readonly size?: RibbonItemSize;
++	readonly style?: RibbonItemStyle;
 +	readonly order?: number;
 +	readonly when?: string;
 +	readonly arguments?: readonly unknown[];
@@ -590,6 +644,8 @@ index 0000000000000000000000000000000000000000..0fc45fc6eeca9fb12f5281df2d1a63f0
 +			],
 +		},
 +		order: orderProperty,
++		size: { type: 'string', enum: ['full', 'half', 'third'], default: 'full', description: localize('ribbon.itemSize', "Button height relative to the Ribbon content: full, half, or third.") },
++		style: { type: 'string', enum: ['icon', 'iconAndLabel'], default: 'iconAndLabel', description: localize('ribbon.itemStyle', "Compact button content: icon only, or an icon followed by its label. Full-height buttons always place the icon above the label.") },
 +		when: whenProperty,
 +		arguments: { type: 'array', description: localize('ribbon.arguments', "Arguments passed to the command."), items: {} },
 +	},
@@ -702,7 +758,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f53279a98c1e4
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/ribbonPart.ts
-@@ -0,0 +1,600 @@
+@@ -0,0 +1,606 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -730,7 +786,7 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +import { IThemeService } from '../../../../platform/theme/common/themeService.js';
 +import { Part } from '../../part.js';
 +import { IWorkbenchLayoutService, Parts } from '../../../services/layout/browser/layoutService.js';
-+import { IRegisteredRibbonTab, IRibbonGroupContribution, IRibbonItemContribution, RibbonBuiltinTabId, ribbonRegistry } from './ribbonExtensionPoint.js';
++import { IRegisteredRibbonTab, IRibbonGroupContribution, IRibbonItemContribution, RibbonBuiltinTabId, RibbonItemSize, RibbonItemStyle, ribbonRegistry } from './ribbonExtensionPoint.js';
 +import { IRibbonService } from './ribbonService.js';
 +
 +const EXPANDED_HEIGHT = 130;
@@ -1111,7 +1167,8 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +		let firstFocusableButton: HTMLButtonElement | undefined;
 +		for (const action of actions) {
 +			const label = mnemonicButtonLabel(action.label, true);
-+			const { button, icon } = this.createButton(items, label, action.class, action.enabled);
++			const size: RibbonItemSize = actions.length === 1 ? 'full' : actions.length === 2 ? 'half' : 'third';
++			const { button, icon } = this.createButton(items, label, action.class, action.enabled, size);
 +			this.renderBuiltinActionIcon(icon, tab, action);
 +			if (!button.disabled) {
 +				firstFocusableButton ??= button;
@@ -1239,7 +1296,7 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +	private renderContributionItem(parent: HTMLElement, tab: IRegisteredRibbonTab, item: IRibbonItemContribution, closeAfterRun: boolean, store: DisposableStore): HTMLButtonElement {
 +		const command = MenuRegistry.getCommand(item.command);
 +		const enabled = !command?.precondition || this.contextKeyService.contextMatchesRules(command.precondition);
-+		const { button, icon } = this.createButton(parent, item.title, undefined, enabled);
++		const { button, icon } = this.createButton(parent, item.title, undefined, enabled, item.size, item.style);
 +		const iconValue = typeof item.icon === 'string' ? item.icon : isDark(this.themeService.getColorTheme().type) ? item.icon.dark : item.icon.light;
 +		const themeIcon = ThemeIcon.fromString(iconValue);
 +		if (themeIcon) {
@@ -1257,11 +1314,16 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +		return button;
 +	}
 +
-+	private createButton(parent: HTMLElement, label: string, iconClass: string | undefined, enabled: boolean): { button: HTMLButtonElement; icon: HTMLElement } {
++	private createButton(parent: HTMLElement, label: string, iconClass: string | undefined, enabled: boolean, size: RibbonItemSize = 'full', style: RibbonItemStyle = 'iconAndLabel'): { button: HTMLButtonElement; icon: HTMLElement } {
 +		const button = append(parent, $<HTMLButtonElement>('button.ribbon-item'));
++		const layout = size === 'full' ? 'vertical' : style === 'icon' ? 'icon-only' : 'horizontal';
++		button.classList.add(`ribbon-item-${size}`, `ribbon-item-${layout}`);
 +		button.type = 'button';
 +		button.disabled = !enabled;
 +		button.setAttribute('aria-label', label);
++		if (layout === 'icon-only') {
++			button.title = label;
++		}
 +		const icon = append(button, $('.ribbon-item-icon'));
 +		if (iconClass) {
 +			icon.classList.add(...iconClass.split(/\s+/).filter(Boolean));
@@ -1363,7 +1425,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..a0f49739c6fa0656f1fb391730c09e7869a331d5
 --- /dev/null
 +++ b/src/vs/workbench/test/browser/parts/ribbon/ribbonPart.test.ts
-@@ -0,0 +1,277 @@
+@@ -0,0 +1,332 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -1485,6 +1547,30 @@ index 0000000000000000000000000000000000000000..a0f49739c6fa0656f1fb391730c09e78
 +		assert.strictEqual(unmappedButton.querySelector('.ribbon-item-icon')?.classList.contains('codicon-file'), true);
 +	});
 +
++	test('automatically lays out built-in buttons in one, two, or three rows', () => {
++		const actions = [
++			disposables.add(new Action('test.builtin.first', 'First')),
++			disposables.add(new Action('test.builtin.second', 'Second')),
++			disposables.add(new Action('test.builtin.third', 'Third')),
++			disposables.add(new Action('test.builtin.fourth', 'Fourth')),
++			disposables.add(new Action('test.builtin.fifth', 'Fifth')),
++			disposables.add(new Action('test.builtin.sixth', 'Sixth')),
++		];
++		createPart(undefined, undefined, [], undefined, [
++			['1_full', [actions[0]]],
++			['2_half', [actions[1], actions[2]]],
++			['3_third', [actions[3], actions[4], actions[5]]],
++		]);
++
++		const classes = (groupId: string) => Array.from(
++			fixture.querySelectorAll<HTMLButtonElement>(`.ribbon-group[data-group-id="${groupId}"] .ribbon-item`),
++			button => button.className,
++		);
++		assert.deepStrictEqual(classes('1_full'), ['ribbon-item ribbon-item-full ribbon-item-vertical']);
++		assert.strictEqual(classes('2_half').every(value => value === 'ribbon-item ribbon-item-half ribbon-item-horizontal'), true);
++		assert.strictEqual(classes('3_third').every(value => value === 'ribbon-item ribbon-item-third ribbon-item-horizontal'), true);
++	});
++
 +	test('uses menubar separator groups and renders a localized title for each group', () => {
 +		const newAction = disposables.add(new Action('workbench.action.files.newUntitledFile', 'New File...'));
 +		const saveAction = disposables.add(new Action('workbench.action.files.save', 'Save'));
@@ -1524,6 +1610,37 @@ index 0000000000000000000000000000000000000000..a0f49739c6fa0656f1fb391730c09e78
 +			Array.from(fixture.querySelectorAll('.ribbon-group-title'), element => element.textContent),
 +			['First', 'Second'],
 +		);
++	});
++
++	test('renders full, half, and third-height contributed button layouts', () => {
++		ribbonRegistry.setTabs([contribution({
++			groups: [
++				{
++					id: 'sizes',
++					title: 'Sizes',
++					items: [
++						{ command: 'test.ribbon.full', title: 'Full', icon: '$(add)', style: 'icon' },
++						{ command: 'test.ribbon.halfIcon', title: 'Half icon', icon: '$(add)', size: 'half', style: 'icon' },
++						{ command: 'test.ribbon.halfLabel', title: 'Half label', icon: '$(add)', size: 'half' },
++						{ command: 'test.ribbon.thirdIcon', title: 'Third icon', icon: '$(add)', size: 'third', style: 'icon' },
++						{ command: 'test.ribbon.thirdLabel', title: 'Third label', icon: '$(add)', size: 'third', style: 'iconAndLabel' },
++					],
++				},
++			],
++		})]);
++		createPart();
++
++		const buttons = new Map(Array.from(
++			fixture.querySelectorAll<HTMLButtonElement>('.ribbon-item'),
++			button => [button.getAttribute('aria-label'), button] as const,
++		));
++
++		assert.strictEqual(buttons.get('Full')?.className, 'ribbon-item ribbon-item-full ribbon-item-vertical');
++		assert.strictEqual(buttons.get('Half icon')?.className, 'ribbon-item ribbon-item-half ribbon-item-icon-only');
++		assert.strictEqual(buttons.get('Half icon')?.title, 'Half icon');
++		assert.strictEqual(buttons.get('Half label')?.className, 'ribbon-item ribbon-item-half ribbon-item-horizontal');
++		assert.strictEqual(buttons.get('Third icon')?.className, 'ribbon-item ribbon-item-third ribbon-item-icon-only');
++		assert.strictEqual(buttons.get('Third label')?.className, 'ribbon-item ribbon-item-third ribbon-item-horizontal');
 +	});
 +
 +	test('folds all groups before showing boundary-aware scroll buttons', () => {
