@@ -1,5 +1,6 @@
 Ribbon Part 补丁：在 Banner 之后增加横跨 Workbench 的可折叠功能区，提供 File/View/Help 内置标签、按原菜单分隔线同步的命名分组，以及扩展声明式 contributes.ribbon 标签、分组、命令按钮。
 保留现有 ActivityBar 入口；Ribbon 支持状态记忆、键盘导航、折叠后的临时覆盖层和启动 Splash 尺寸恢复。
+宽度不足时全部功能组折叠为下拉菜单，仍溢出时通过按边界显示的左右悬浮按钮滚动，且不显示横向滚动条。
 
 diff --git a/src/vs/code/electron-browser/workbench/workbench.ts b/src/vs/code/electron-browser/workbench/workbench.ts
 index 767fbe08db3c00b0d3da3e5c46843e87702b3ed6..bdc2f1954ce3cf5de71e97d553de40c289bf455f 100644
@@ -257,7 +258,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a5579107146f
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/media/ribbonpart.css
-@@ -0,0 +1,154 @@
+@@ -0,0 +1,214 @@
 +.monaco-workbench .part.ribbon {
 +	background: var(--vscode-editor-background);
 +	color: var(--vscode-foreground);
@@ -282,7 +283,9 @@ index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a557
 +
 +.ribbon-tab,
 +.ribbon-collapse,
-+.ribbon-item {
++.ribbon-item,
++.ribbon-group-dropdown,
++.ribbon-scroll-button {
 +	border: 0;
 +	color: inherit;
 +	background: transparent;
@@ -297,7 +300,9 @@ index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a557
 +
 +.ribbon-tab:hover,
 +.ribbon-item:hover:not(:disabled),
-+.ribbon-collapse:hover {
++.ribbon-collapse:hover,
++.ribbon-group-dropdown:hover,
++.ribbon-scroll-button:hover {
 +	background: var(--vscode-toolbar-hoverBackground);
 +}
 +
@@ -313,7 +318,9 @@ index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a557
 +
 +.ribbon-tab:focus-visible,
 +.ribbon-item:focus-visible,
-+.ribbon-collapse:focus-visible {
++.ribbon-collapse:focus-visible,
++.ribbon-group-dropdown:focus-visible,
++.ribbon-scroll-button:focus-visible {
 +	outline: 1px solid var(--vscode-focusBorder);
 +	outline-offset: -1px;
 +}
@@ -326,13 +333,19 @@ index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a557
 +
 +.ribbon-content,
 +.ribbon-overlay {
++	position: relative;
 +	height: 98px;
 +	box-sizing: border-box;
-+	overflow-x: auto;
-+	overflow-y: hidden;
++	overflow: hidden;
 +	background: var(--vscode-editor-background);
 +	color: var(--vscode-foreground);
 +	box-shadow: 0 4px 8px var(--vscode-widget-shadow);
++}
++
++.ribbon-scroll-viewport {
++	width: 100%;
++	height: 100%;
++	overflow: hidden;
 +}
 +
 +.ribbon-groups {
@@ -351,6 +364,54 @@ index 0000000000000000000000000000000000000000..3d2484dc6bafd288de772bf2da12a557
 +	min-width: max-content;
 +	padding: 0 6px;
 +	border-right: 1px solid var(--vscode-panel-border);
++}
++
++.ribbon-group-dropdown {
++	display: none;
++	align-items: center;
++	justify-content: center;
++	gap: 4px;
++	height: 100%;
++	min-width: 72px;
++	max-width: 112px;
++	padding: 0 8px;
++	cursor: pointer;
++}
++
++.ribbon-group-dropdown-label {
++	overflow: hidden;
++	text-overflow: ellipsis;
++	white-space: nowrap;
++}
++
++.ribbon-group.folded .ribbon-items,
++.ribbon-group.folded .ribbon-group-title {
++	display: none;
++}
++
++.ribbon-group.folded .ribbon-group-dropdown {
++	display: flex;
++}
++
++.ribbon-scroll-button {
++	position: absolute;
++	top: 0;
++	z-index: 1;
++	width: 32px;
++	height: 100%;
++	padding: 0;
++	font-size: 18px;
++	cursor: pointer;
++	background: var(--vscode-editor-background);
++	box-shadow: 0 0 8px var(--vscode-widget-shadow);
++}
++
++.ribbon-scroll-button.left {
++	left: 0;
++}
++
++.ribbon-scroll-button.right {
++	right: 0;
 +}
 +
 +.ribbon-items {
@@ -641,7 +702,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f53279a98c1e4
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/ribbonPart.ts
-@@ -0,0 +1,533 @@
+@@ -0,0 +1,600 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -650,7 +711,7 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +import './media/ribbonpart.css';
 +import { $, addDisposableListener, append, clearNode, EventType, getWindow, isAncestor } from '../../../../base/browser/dom.js';
 +import { asCSSUrl } from '../../../../base/browser/cssValue.js';
-+import { IAction, SubmenuAction } from '../../../../base/common/actions.js';
++import { Action, IAction, SubmenuAction } from '../../../../base/common/actions.js';
 +import { Codicon } from '../../../../base/common/codicons.js';
 +import { mnemonicButtonLabel } from '../../../../base/common/labels.js';
 +import { DisposableStore } from '../../../../base/common/lifecycle.js';
@@ -1005,7 +1066,9 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +	private renderTabContent(tab: RibbonTab, container: HTMLElement, closeAfterRun: boolean, store: DisposableStore = this.contentDisposables): HTMLButtonElement | undefined {
 +		clearNode(container);
 +		container.setAttribute('aria-label', tab.title);
-+		const groups = append(container, $('.ribbon-groups'));
++		const viewport = append(container, $('.ribbon-scroll-viewport'));
++		const groups = append(viewport, $('.ribbon-groups'));
++		const collapsibleGroups: HTMLElement[] = [];
 +
 +		if (isBuiltinTab(tab)) {
 +			const menu = store.add(this.menuService.createMenu(tab.menuId, this.contextKeyService, { emitEventsForSubmenuChanges: true }));
@@ -1020,27 +1083,31 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +			}));
 +			let firstFocusableButton: HTMLButtonElement | undefined;
 +			for (const [groupId, actions] of menu.getActions()) {
-+				const candidate = this.renderActionGroup(groups, tab, groupId, actions, closeAfterRun, store);
++				const candidate = this.renderActionGroup(groups, tab, groupId, actions, closeAfterRun, store, collapsibleGroups);
 +				firstFocusableButton ??= candidate;
 +			}
++			this.installResponsiveOverflow(container, viewport, groups, collapsibleGroups, store);
 +			return firstFocusableButton;
 +		}
 +
 +		let firstFocusableButton: HTMLButtonElement | undefined;
 +		for (const group of tab.groups.filter(group => this.matches(group.when))) {
-+			const candidate = this.renderContributionGroup(groups, tab, group, closeAfterRun, store);
++			const candidate = this.renderContributionGroup(groups, tab, group, closeAfterRun, store, collapsibleGroups);
 +			firstFocusableButton ??= candidate;
 +		}
++		this.installResponsiveOverflow(container, viewport, groups, collapsibleGroups, store);
 +		return firstFocusableButton;
 +	}
 +
-+	private renderActionGroup(parent: HTMLElement, tab: IBuiltinRibbonTab, groupId: string, actions: readonly IAction[], closeAfterRun: boolean, store: DisposableStore): HTMLButtonElement | undefined {
++	private renderActionGroup(parent: HTMLElement, tab: IBuiltinRibbonTab, groupId: string, actions: readonly IAction[], closeAfterRun: boolean, store: DisposableStore, collapsibleGroups: HTMLElement[]): HTMLButtonElement | undefined {
 +		const title = builtinGroupTitle(tab, groupId, actions);
 +		const group = append(parent, $('.ribbon-group'));
 +		group.setAttribute('role', 'group');
 +		group.setAttribute('aria-label', title);
 +		group.dataset.groupId = groupId;
++		collapsibleGroups.push(group);
 +		const items = append(group, $('.ribbon-items.compact'));
++		this.renderGroupDropdown(group, title, actions, store);
 +		let firstFocusableButton: HTMLButtonElement | undefined;
 +		for (const action of actions) {
 +			const label = mnemonicButtonLabel(action.label, true);
@@ -1092,11 +1159,18 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +		container.classList.add(...ThemeIcon.asClassNameArray(builtinActionFallbackIcon(tab, action)));
 +	}
 +
-+	private renderContributionGroup(parent: HTMLElement, tab: IRegisteredRibbonTab, contribution: IRibbonGroupContribution, closeAfterRun: boolean, store: DisposableStore): HTMLButtonElement | undefined {
++	private renderContributionGroup(parent: HTMLElement, tab: IRegisteredRibbonTab, contribution: IRibbonGroupContribution, closeAfterRun: boolean, store: DisposableStore, collapsibleGroups: HTMLElement[]): HTMLButtonElement | undefined {
 +		const group = append(parent, $('.ribbon-group'));
 +		group.setAttribute('role', 'group');
 +		group.setAttribute('aria-label', contribution.title);
++		collapsibleGroups.push(group);
 +		const items = append(group, $('.ribbon-items'));
++		const dropdownActions = contribution.items.filter(item => this.matches(item.when)).map(item => {
++			const command = MenuRegistry.getCommand(item.command);
++			const enabled = !command?.precondition || this.contextKeyService.contextMatchesRules(command.precondition);
++			return store.add(new Action(item.command, item.title, undefined, enabled, async () => { await this.commandService.executeCommand(item.command, ...(item.arguments ?? [])); }));
++		});
++		this.renderGroupDropdown(group, contribution.title, dropdownActions, store);
 +		let firstFocusableButton: HTMLButtonElement | undefined;
 +		for (const item of contribution.items.filter(item => this.matches(item.when))) {
 +			const button = this.renderContributionItem(items, tab, item, closeAfterRun, store);
@@ -1106,6 +1180,60 @@ index 0000000000000000000000000000000000000000..c1270d185fca4583327ac3bd524f5327
 +		}
 +		append(group, $('div.ribbon-group-title')).textContent = contribution.title;
 +		return firstFocusableButton;
++	}
++
++	private renderGroupDropdown(parent: HTMLElement, title: string, actions: readonly IAction[], store: DisposableStore): void {
++		const button = append(parent, $('button.ribbon-group-dropdown'));
++		button.type = 'button';
++		button.setAttribute('aria-label', localize('ribbon.openGroup', "Open {0} menu", title));
++		append(button, $('span.ribbon-group-dropdown-label')).textContent = title;
++		append(button, $('.codicon.codicon-chevron-down'));
++		store.add(addDisposableListener(button, EventType.CLICK, () => {
++			this.contextMenuService.showContextMenu({ getAnchor: () => button, getActions: () => [...actions] });
++		}));
++	}
++
++	private installResponsiveOverflow(container: HTMLElement, viewport: HTMLElement, groups: HTMLElement, collapsibleGroups: readonly HTMLElement[], store: DisposableStore): void {
++		const left = append(container, $('button.ribbon-scroll-button.left.codicon.codicon-chevron-left'));
++		const right = append(container, $('button.ribbon-scroll-button.right.codicon.codicon-chevron-right'));
++		left.type = right.type = 'button';
++		left.setAttribute('aria-label', localize('ribbon.scrollLeft', "Scroll Ribbon left"));
++		right.setAttribute('aria-label', localize('ribbon.scrollRight', "Scroll Ribbon right"));
++		left.hidden = right.hidden = true;
++
++		const updateScrollButtons = () => {
++			const maximum = Math.max(0, groups.scrollWidth - viewport.clientWidth);
++			left.hidden = maximum === 0 || viewport.scrollLeft <= 1;
++			right.hidden = maximum === 0 || viewport.scrollLeft >= maximum - 1;
++		};
++		const fit = () => {
++			for (const group of collapsibleGroups) {
++				group.classList.remove('folded');
++			}
++			viewport.scrollLeft = 0;
++			if (groups.scrollWidth > viewport.clientWidth) {
++				for (const group of collapsibleGroups) {
++					group.classList.add('folded');
++				}
++			}
++			updateScrollButtons();
++		};
++		const scroll = (direction: -1 | 1) => {
++			viewport.scrollLeft += direction * Math.max(80, Math.floor(viewport.clientWidth * 0.8));
++			updateScrollButtons();
++		};
++
++		store.add(addDisposableListener(left, EventType.CLICK, () => scroll(-1)));
++		store.add(addDisposableListener(right, EventType.CLICK, () => scroll(1)));
++		store.add(addDisposableListener(viewport, EventType.SCROLL, updateScrollButtons));
++		store.add(addDisposableListener(getWindow(container), EventType.RESIZE, fit));
++		const ResizeObserverCtor = getWindow(container).ResizeObserver;
++		if (ResizeObserverCtor) {
++			const observer = new ResizeObserverCtor(fit);
++			observer.observe(container);
++			store.add({ dispose: () => observer.disconnect() });
++		}
++		fit();
 +	}
 +
 +	private renderContributionItem(parent: HTMLElement, tab: IRegisteredRibbonTab, item: IRibbonItemContribution, closeAfterRun: boolean, store: DisposableStore): HTMLButtonElement {
@@ -1235,7 +1363,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..a0f49739c6fa0656f1fb391730c09e7869a331d5
 --- /dev/null
 +++ b/src/vs/workbench/test/browser/parts/ribbon/ribbonPart.test.ts
-@@ -0,0 +1,242 @@
+@@ -0,0 +1,277 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -1396,6 +1524,41 @@ index 0000000000000000000000000000000000000000..a0f49739c6fa0656f1fb391730c09e78
 +			Array.from(fixture.querySelectorAll('.ribbon-group-title'), element => element.textContent),
 +			['First', 'Second'],
 +		);
++	});
++
++	test('folds all groups before showing boundary-aware scroll buttons', () => {
++		const actions = [
++			disposables.add(new Action('test.first', 'First')),
++			disposables.add(new Action('test.second', 'Second')),
++			disposables.add(new Action('test.third', 'Third')),
++		];
++		createPart(undefined, undefined, [], undefined, [
++			['1_first', [actions[0]]],
++			['2_second', [actions[1]]],
++			['3_third', [actions[2]]],
++		]);
++
++		const viewport = fixture.querySelector<HTMLElement>('.ribbon-scroll-viewport')!;
++		const groups = fixture.querySelector<HTMLElement>('.ribbon-groups')!;
++		Object.defineProperty(viewport, 'clientWidth', { configurable: true, value: 160 });
++		Object.defineProperty(groups, 'scrollWidth', { configurable: true, get: () => 300 - groups.querySelectorAll('.ribbon-group.folded').length * 50 });
++		mainWindow.dispatchEvent(new mainWindow.Event('resize'));
++
++		assert.strictEqual(groups.querySelectorAll('.ribbon-group.folded').length, 3);
++		const left = fixture.querySelector<HTMLButtonElement>('.ribbon-scroll-button.left')!;
++		const right = fixture.querySelector<HTMLButtonElement>('.ribbon-scroll-button.right')!;
++		assert.strictEqual(left.hidden, true);
++		assert.strictEqual(right.hidden, true);
++
++		Object.defineProperty(groups, 'scrollWidth', { configurable: true, get: () => 400 - groups.querySelectorAll('.ribbon-group.folded').length * 50 });
++		mainWindow.dispatchEvent(new mainWindow.Event('resize'));
++		assert.strictEqual(groups.querySelectorAll('.ribbon-group.folded').length, 3);
++		assert.strictEqual(left.hidden, true);
++		assert.strictEqual(right.hidden, false);
++
++		right.click();
++		assert.strictEqual(left.hidden, false);
++		assert.strictEqual(right.hidden, true);
 +	});
 +
 +	test('closes every built-in collapsed overlay on activity bar mousedown before its click handler runs', () => {
