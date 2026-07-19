@@ -259,7 +259,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..595d553faa13b35b251903437d26c19a5b2dc84b
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/media/ribbonpart.css
-@@ -0,0 +1,438 @@
+@@ -0,0 +1,445 @@
 +.monaco-workbench .part.ribbon {
 +	background: var(--vscode-editor-background);
 +	color: var(--vscode-foreground);
@@ -551,11 +551,18 @@ index 0000000000000000000000000000000000000000..595d553faa13b35b251903437d26c19a
 +	height: 22px;
 +}
 +
-+/* The global Codicon font shorthand fixes glyphs at 16px. Keep them in sync with the responsive icon box. */
-+.ribbon-root .ribbon-item-icon.codicon,
-+.ribbon-overlay .ribbon-item-icon.codicon,
-+.ribbon-root .ribbon-group-dropdown-icon.codicon,
-+.ribbon-overlay .ribbon-group-dropdown-icon.codicon {
++/*
++ * Codicon glyphs are clamped to 16px by two layers of upstream rules:
++ *   1) `.codicon[class*='codicon-'] { font: 16px/1 codicon }` (shorthand, specificity 0,2,0)
++ *   2) `.monaco-workbench .part .codicon[class*='codicon-'] { font-size: calc(...) }` (specificity 0,4,0)
++ * The (0,4,0) rule wins over the previous `.ribbon-root .ribbon-item-icon.codicon` (0,3,0) override,
++ * so the responsive icon size never took effect. Anchor the override on `.monaco-workbench .part.ribbon`
++ * (and the workbench-level overlay container) to push specificity past 0,4,0.
++ */
++.monaco-workbench .part.ribbon .ribbon-root .ribbon-item-icon.codicon,
++.monaco-workbench .part.ribbon .ribbon-root .ribbon-group-dropdown-icon.codicon,
++.monaco-workbench .ribbon-overlay .ribbon-item-icon.codicon,
++.monaco-workbench .ribbon-overlay .ribbon-group-dropdown-icon.codicon {
 +	font-size: var(--ribbon-icon-size);
 +}
 +
