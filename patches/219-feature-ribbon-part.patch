@@ -256,10 +256,10 @@ index 3480283a2177b0833bc5a497c746aa311b79a6f8..b02fbc4e7a82f2216d47392dd8bc1b57
  						data: middleSection,
 diff --git a/src/vs/workbench/browser/parts/ribbon/media/ribbonpart.css b/src/vs/workbench/browser/parts/ribbon/media/ribbonpart.css
 new file mode 100644
-index 0000000000000000000000000000000000000000..c4a91275e96609ad8a3ad868e98eea5d23a31dce
+index 0000000000000000000000000000000000000000..595d553faa13b35b251903437d26c19a5b2dc84b
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/media/ribbonpart.css
-@@ -0,0 +1,423 @@
+@@ -0,0 +1,438 @@
 +.monaco-workbench .part.ribbon {
 +	background: var(--vscode-editor-background);
 +	color: var(--vscode-foreground);
@@ -395,13 +395,14 @@ index 0000000000000000000000000000000000000000..c4a91275e96609ad8a3ad868e98eea5d
 +}
 +
 +.ribbon-group-dropdown-icon {
++	--ribbon-icon-size: calc(var(--ribbon-item-full-height) - 11px);
 +	display: flex;
 +	flex: 1 1 0;
 +	align-items: center;
 +	justify-content: center;
 +	width: 100%;
 +	min-height: 0;
-+	font-size: min(52px, calc(var(--ribbon-item-full-height) - 22px));
++	font-size: var(--ribbon-icon-size);
 +	line-height: 1;
 +	background-position: center;
 +	background-repeat: no-repeat;
@@ -496,6 +497,8 @@ index 0000000000000000000000000000000000000000..c4a91275e96609ad8a3ad868e98eea5d
 +	flex-direction: column;
 +	min-width: 62px;
 +	max-width: 118px;
++	padding-right: 2px;
++	padding-left: 2px;
 +}
 +
 +.ribbon-item-horizontal {
@@ -520,13 +523,14 @@ index 0000000000000000000000000000000000000000..c4a91275e96609ad8a3ad868e98eea5d
 +}
 +
 +.ribbon-item-icon {
++	--ribbon-icon-size: 18px;
 +	display: flex;
 +	align-items: center;
 +	justify-content: center;
 +	flex: 0 0 auto;
 +	width: 18px;
 +	height: 18px;
-+	font-size: 18px;
++	font-size: var(--ribbon-icon-size);
 +	line-height: 1;
 +	background-position: center;
 +	background-repeat: no-repeat;
@@ -534,17 +538,25 @@ index 0000000000000000000000000000000000000000..c4a91275e96609ad8a3ad868e98eea5d
 +}
 +
 +.ribbon-item-vertical .ribbon-item-icon {
++	--ribbon-icon-size: calc(var(--ribbon-item-full-height) - 19px);
 +	flex: 1 1 0;
 +	width: 100%;
 +	height: auto;
 +	min-height: 0;
-+	font-size: min(50px, calc(var(--ribbon-item-full-height) - 24px));
 +}
 +
 +.ribbon-item-half .ribbon-item-icon {
++	--ribbon-icon-size: 22px;
 +	width: 22px;
 +	height: 22px;
-+	font-size: 22px;
++}
++
++/* The global Codicon font shorthand fixes glyphs at 16px. Keep them in sync with the responsive icon box. */
++.ribbon-root .ribbon-item-icon.codicon,
++.ribbon-overlay .ribbon-item-icon.codicon,
++.ribbon-root .ribbon-group-dropdown-icon.codicon,
++.ribbon-overlay .ribbon-group-dropdown-icon.codicon {
++	font-size: var(--ribbon-icon-size);
 +}
 +
 +.ribbon-item-label {
@@ -584,15 +596,18 @@ index 0000000000000000000000000000000000000000..c4a91275e96609ad8a3ad868e98eea5d
 +
 +.ribbon-dropdown-primary,
 +.ribbon-dropdown-single {
-+	flex: 1;
++	flex: 1 1 0;
 +	flex-direction: column;
++	min-height: 0;
 +}
 +
 +.ribbon-dropdown-primary .ribbon-item-icon,
 +.ribbon-dropdown-single > .ribbon-item-icon {
-+	width: 42px;
-+	height: 42px;
-+	font-size: 40px;
++	--ribbon-icon-size: calc(var(--ribbon-item-full-height) - 22px);
++	flex: 1 1 0;
++	width: 100%;
++	height: auto;
++	min-height: 0;
 +}
 +
 +.ribbon-dropdown-primary:disabled {
