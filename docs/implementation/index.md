@@ -13,6 +13,7 @@
 
 ### `219-feature-ribbon-part.patch` 维护记录
 
+- 2026-07-19：降低内置 Ribbon tab 优先级。`BUILTIN_TABS` 的 `order` 从 `10 / 20 / 100` 调至 `1000 / 2000 / 3000`，扩展声明的 tab（默认 `order=0`）会自然排在内置 `File / View / Help` 之前；同步把 `ensureActiveTab` 的 fallback 从硬编码 `File` 改为排序后第一个 tab，使启动激活的 tab 与视觉首位一致。内置 tab 当前仅作为 Ribbon 实现的测试占位，正式版将移除。
 - 2026-07-19：内置 Ribbon tab 与内置菜单分组标题按当前界面语言显示；中文语言环境下 `File / View / Help` 与对应分组标题显示中文，非中文语言环境保留 VS Code 常规本地化结果。
 - 2026-07-19：去掉 `localizeRibbonLabel` 包装函数，改为模块顶层 `isZhHansLocale` 常量配合 `isZhHansLocale ? "中文" : localize('key', "Default")` 内联三元。原因：上游 `build/lib/nls-analysis.ts` 的 `parseLocalizeKeyOrValue` 会对源码里每个 `localize(...)` 的第一参数做 `eval`，第一参数必须是字面量；而包装函数里的 `localize(key, defaultValue)` 第一参数是变量 `key`，eval 时抛 `ReferenceError: key is not defined`，导致发行 CI 在 `vscode-min-prepack` 阶段失败。本地 `prepare.sh` 不跑 min-prepack，所以 CI 才暴露。
 

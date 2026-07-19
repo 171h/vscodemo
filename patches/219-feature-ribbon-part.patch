@@ -1077,9 +1077,9 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +const isZhHansLocale = language.toLowerCase().startsWith('zh');
 +
 +const BUILTIN_TABS: readonly IBuiltinRibbonTab[] = [
-+	{ id: RibbonBuiltinTabId.File, title: isZhHansLocale ? "文件" : localize('ribbon.file', "File"), order: 10, menuId: MenuId.MenubarFileMenu },
-+	{ id: RibbonBuiltinTabId.View, title: isZhHansLocale ? "视图" : localize('ribbon.view', "View"), order: 20, menuId: MenuId.MenubarViewMenu },
-+	{ id: RibbonBuiltinTabId.Help, title: isZhHansLocale ? "帮助" : localize('ribbon.help', "Help"), order: 100, menuId: MenuId.MenubarHelpMenu },
++	{ id: RibbonBuiltinTabId.File, title: isZhHansLocale ? "文件" : localize('ribbon.file', "File"), order: 1000, menuId: MenuId.MenubarFileMenu },
++	{ id: RibbonBuiltinTabId.View, title: isZhHansLocale ? "视图" : localize('ribbon.view', "View"), order: 2000, menuId: MenuId.MenubarViewMenu },
++	{ id: RibbonBuiltinTabId.Help, title: isZhHansLocale ? "帮助" : localize('ribbon.help', "Help"), order: 3000, menuId: MenuId.MenubarHelpMenu },
 +];
 +
 +function isBuiltinTab(tab: RibbonTab): tab is IBuiltinRibbonTab {
@@ -1339,7 +1339,7 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +		let active = tabs.find(tab => tab.id === this.activeTabId);
 +		const defaultTab = tabs.find(tab => !isBuiltinTab(tab) && tab.default);
 +		if (!active || (!this.hasPersistedActiveTab && defaultTab)) {
-+			active = defaultTab ?? tabs.find(tab => tab.id === RibbonBuiltinTabId.File) ?? tabs[0];
++			active = defaultTab ?? tabs[0];
 +			this.activeTabId = active?.id ?? '';
 +		}
 +		return active;
