@@ -259,7 +259,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..c4a91275e96609ad8a3ad868e98eea5d23a31dce
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/media/ribbonpart.css
-@@ -0,0 +1,385 @@
+@@ -0,0 +1,423 @@
 +.monaco-workbench .part.ribbon {
 +	background: var(--vscode-editor-background);
 +	color: var(--vscode-foreground);
@@ -373,6 +373,7 @@ index 0000000000000000000000000000000000000000..c4a91275e96609ad8a3ad868e98eea5d
 +
 +.ribbon-group {
 +	display: flex;
++	--ribbon-item-full-height: 74px;
 +	flex-direction: column;
 +	min-width: max-content;
 +	padding: 0 6px;
@@ -381,20 +382,47 @@ index 0000000000000000000000000000000000000000..c4a91275e96609ad8a3ad868e98eea5d
 +
 +.ribbon-group-dropdown {
 +	display: none;
++	flex-direction: column;
 +	align-items: center;
 +	justify-content: center;
-+	gap: 4px;
++	gap: 0;
 +	height: 100%;
 +	min-width: 72px;
 +	max-width: 112px;
-+	padding: 0 8px;
++	padding: 2px 8px;
++	box-sizing: border-box;
 +	cursor: pointer;
 +}
 +
++.ribbon-group-dropdown-icon {
++	display: flex;
++	flex: 1 1 0;
++	align-items: center;
++	justify-content: center;
++	width: 100%;
++	min-height: 0;
++	font-size: min(52px, calc(var(--ribbon-item-full-height) - 22px));
++	line-height: 1;
++	background-position: center;
++	background-repeat: no-repeat;
++	background-size: contain;
++}
++
 +.ribbon-group-dropdown-label {
++	flex: 0 0 auto;
++	max-width: 100%;
 +	overflow: hidden;
++	font-size: 11px;
++	line-height: 14px;
 +	text-overflow: ellipsis;
 +	white-space: nowrap;
++}
++
++.ribbon-group-dropdown-chevron {
++	flex: 0 0 12px;
++	height: 12px;
++	font-size: 12px;
++	line-height: 12px;
 +}
 +
 +.ribbon-group.folded .ribbon-items,
@@ -438,7 +466,7 @@ index 0000000000000000000000000000000000000000..c4a91275e96609ad8a3ad868e98eea5d
 +	grid-auto-flow: column;
 +	grid-auto-columns: max-content;
 +	gap: 2px;
-+	height: 74px;
++	height: var(--ribbon-item-full-height);
 +}
 +
 +.ribbon-item {
@@ -492,19 +520,25 @@ index 0000000000000000000000000000000000000000..c4a91275e96609ad8a3ad868e98eea5d
 +}
 +
 +.ribbon-item-icon {
++	display: flex;
++	align-items: center;
++	justify-content: center;
 +	flex: 0 0 auto;
 +	width: 18px;
 +	height: 18px;
 +	font-size: 18px;
++	line-height: 1;
 +	background-position: center;
 +	background-repeat: no-repeat;
 +	background-size: contain;
 +}
 +
-+.ribbon-item-full .ribbon-item-icon {
-+	width: 46px;
-+	height: 46px;
-+	font-size: 44px;
++.ribbon-item-vertical .ribbon-item-icon {
++	flex: 1 1 0;
++	width: 100%;
++	height: auto;
++	min-height: 0;
++	font-size: min(50px, calc(var(--ribbon-item-full-height) - 24px));
 +}
 +
 +.ribbon-item-half .ribbon-item-icon {
@@ -975,7 +1009,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6a94c7687
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/ribbonPart.ts
-@@ -0,0 +1,846 @@
+@@ -0,0 +1,908 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -1098,6 +1132,72 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +	}
 +	if (id.includes('close')) {
 +		return Codicon.close;
++	}
++	if (id.includes('settings') || id.includes('preferences')) {
++		return Codicon.settingsGear;
++	}
++	if (id.includes('theme') || id.includes('color')) {
++		return Codicon.symbolColor;
++	}
++	if (id.includes('fullscreen') || id.includes('zenmode')) {
++		return Codicon.screenFull;
++	}
++	if (id.includes('zoomin')) {
++		return Codicon.zoomIn;
++	}
++	if (id.includes('zoomout')) {
++		return Codicon.zoomOut;
++	}
++	if (id.includes('auxiliarybar') || id.includes('secondarysidebar')) {
++		return Codicon.layoutSidebarRight;
++	}
++	if (id.includes('sidebar')) {
++		return Codicon.layoutSidebarLeft;
++	}
++	if (id.includes('panel')) {
++		return Codicon.layoutPanel;
++	}
++	if (id.includes('layout') || id.includes('appearance')) {
++		return Codicon.layout;
++	}
++	if (id.includes('terminal')) {
++		return Codicon.terminal;
++	}
++	if (id.includes('output')) {
++		return Codicon.output;
++	}
++	if (id.includes('debug')) {
++		return Codicon.debug;
++	}
++	if (id.includes('extension')) {
++		return Codicon.extensions;
++	}
++	if (id.includes('sourcecontrol')) {
++		return Codicon.sourceControl;
++	}
++	if (id.includes('search') || id.includes('find')) {
++		return Codicon.search;
++	}
++	if (id.includes('documentation') || id.includes('reference') || id.includes('releasenotes')) {
++		return Codicon.book;
++	}
++	if (id.includes('feedback') || id.includes('issue')) {
++		return Codicon.feedback;
++	}
++	if (id.includes('license') || id.includes('privacy')) {
++		return Codicon.law;
++	}
++	if (id.includes('about')) {
++		return Codicon.info;
++	}
++	if (id.includes('share')) {
++		return Codicon.share;
++	}
++	if (id.includes('account') || id.includes('profile')) {
++		return Codicon.account;
++	}
++	if (id.includes('remote')) {
++		return Codicon.remote;
 +	}
 +
 +	switch (tab.id) {
@@ -1389,7 +1489,7 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +		group.dataset.groupId = groupId;
 +		collapsibleGroups.push(group);
 +		const items = append(group, $('.ribbon-items.compact'));
-+		this.renderGroupDropdown(group, title, actions, store);
++		this.renderGroupDropdown(group, tab, title, actions, store);
 +		let firstFocusableButton: HTMLButtonElement | undefined;
 +		for (const action of actions) {
 +			const label = mnemonicButtonLabel(action.label, true);
@@ -1400,7 +1500,7 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +			if (this.supportsIconOnlyLayout(action.id)) {
 +				compactLayouts.push({ size: 'third', style: 'icon' });
 +			}
-+			const { button, icon } = this.createButton(items, label, action.class, action.enabled, size, 'iconAndLabel', compactLayouts);
++			const { button, icon } = this.createButton(items, label, action.enabled, size, 'iconAndLabel', compactLayouts);
 +			this.renderBuiltinActionIcon(icon, tab, action);
 +			if (!button.disabled) {
 +				firstFocusableButton ??= button;
@@ -1426,10 +1526,6 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +	}
 +
 +	private renderBuiltinActionIcon(container: HTMLElement, tab: IBuiltinRibbonTab, action: IAction): void {
-+		if (action.class) {
-+			return;
-+		}
-+
 +		if (action instanceof MenuItemAction || action instanceof SubmenuItemAction) {
 +			const actionIcon = action.item.icon;
 +			if (ThemeIcon.isThemeIcon(actionIcon)) {
@@ -1494,19 +1590,22 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +		const button = append(parent, $<HTMLButtonElement>('button.ribbon-group-dropdown'));
 +		button.type = 'button';
 +		button.setAttribute('aria-label', localize('ribbon.openGroup', "Open {0} menu", contribution.title));
++		const representativeItem = contribution.items.find(item => this.matches(item.when)) ?? contribution.items[0];
++		this.renderContributionIcon(append(button, $('.ribbon-group-dropdown-icon')), tab, representativeItem);
 +		append(button, $('span.ribbon-group-dropdown-label')).textContent = contribution.title;
-+		append(button, $('.codicon.codicon-chevron-down'));
++		append(button, $('.ribbon-group-dropdown-chevron.codicon.codicon-chevron-down'));
 +		store.add(addDisposableListener(button, EventType.CLICK, () => {
 +			this.showContributionMenu(button, tab, { items: contribution.items });
 +		}));
 +	}
 +
-+	private renderGroupDropdown(parent: HTMLElement, title: string, actions: readonly IAction[], store: DisposableStore): void {
++	private renderGroupDropdown(parent: HTMLElement, tab: IBuiltinRibbonTab, title: string, actions: readonly IAction[], store: DisposableStore): void {
 +		const button = append(parent, $<HTMLButtonElement>('button.ribbon-group-dropdown'));
 +		button.type = 'button';
 +		button.setAttribute('aria-label', localize('ribbon.openGroup', "Open {0} menu", title));
++		this.renderBuiltinActionIcon(append(button, $('.ribbon-group-dropdown-icon')), tab, actions[0]);
 +		append(button, $('span.ribbon-group-dropdown-label')).textContent = title;
-+		append(button, $('.codicon.codicon-chevron-down'));
++		append(button, $('.ribbon-group-dropdown-chevron.codicon.codicon-chevron-down'));
 +		store.add(addDisposableListener(button, EventType.CLICK, () => {
 +			this.contextMenuService.showContextMenu({ getAnchor: () => button, getActions: () => [...actions] });
 +		}));
@@ -1613,7 +1712,7 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +		};
 +
 +		if (type === 'button') {
-+			const { button, icon } = this.createButton(parent, item.title, undefined, enabled, item.size, item.style, item.responsive);
++			const { button, icon } = this.createButton(parent, item.title, enabled, item.size, item.style, item.responsive);
 +			this.renderContributionIcon(icon, tab, item);
 +			store.add(addDisposableListener(button, EventType.CLICK, () => this.runContributionCommand(item, closeAfterRun)));
 +			return button;
@@ -1757,7 +1856,7 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +		return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'none'; font-src data:"><style>html,body{box-sizing:border-box;margin:0;min-height:100%;font:13px sans-serif}${css}</style></head><body>${content.html}</body></html>`;
 +	}
 +
-+	private createButton(parent: HTMLElement, label: string, iconClass: string | undefined, enabled: boolean, size: RibbonItemSize = 'full', style: RibbonItemStyle = 'iconAndLabel', responsive: readonly IRibbonResponsiveLayoutContribution[] = []): { button: HTMLButtonElement; icon: HTMLElement } {
++	private createButton(parent: HTMLElement, label: string, enabled: boolean, size: RibbonItemSize = 'full', style: RibbonItemStyle = 'iconAndLabel', responsive: readonly IRibbonResponsiveLayoutContribution[] = []): { button: HTMLButtonElement; icon: HTMLElement } {
 +		const button = append(parent, $<HTMLButtonElement>('button.ribbon-item'));
 +		button.dataset.ribbonSize = size;
 +		button.dataset.ribbonStyle = style;
@@ -1770,9 +1869,6 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +		button.setAttribute('aria-label', label);
 +		this.applyButtonLayout(button, size, style);
 +		const icon = append(button, $('.ribbon-item-icon'));
-+		if (iconClass) {
-+			icon.classList.add(...iconClass.split(/\s+/).filter(Boolean));
-+		}
 +		append(button, $('span.ribbon-item-label')).textContent = label;
 +		return { button, icon };
 +	}
@@ -1882,7 +1978,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..ba5231949bd7f45e5c45a5963d828ef7ee68d137
 --- /dev/null
 +++ b/src/vs/workbench/test/browser/parts/ribbon/ribbonPart.test.ts
-@@ -0,0 +1,518 @@
+@@ -0,0 +1,531 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -1993,15 +2089,18 @@ index 0000000000000000000000000000000000000000..ba5231949bd7f45e5c45a5963d828ef7
 +
 +	test('renders fallback icons and removes menubar mnemonics from built-in actions', () => {
 +		createPart(undefined, undefined, [
-+			disposables.add(new Action('workbench.action.files.newUntitledFile', '&&New File...')),
++			disposables.add(new Action('workbench.action.files.newUntitledFile', '&&New File...', 'unavailable-action-icon')),
 +			disposables.add(new Action('test.builtin.unmapped', 'Unmapped')),
++			disposables.add(new Action('workbench.action.openSettings', 'Settings')),
 +		]);
 +
-+		const [button, unmappedButton] = fixture.querySelectorAll<HTMLButtonElement>('.ribbon-item');
++		const [button, unmappedButton, settingsButton] = fixture.querySelectorAll<HTMLButtonElement>('.ribbon-item');
 +		assert.strictEqual(button.getAttribute('aria-label'), 'New File...');
 +		assert.strictEqual(button.querySelector('.ribbon-item-label')?.textContent, 'New File...');
 +		assert.strictEqual(button.querySelector('.ribbon-item-icon')?.classList.contains('codicon-new-file'), true);
++		assert.strictEqual(button.querySelector('.ribbon-item-icon')?.classList.contains('unavailable-action-icon'), false);
 +		assert.strictEqual(unmappedButton.querySelector('.ribbon-item-icon')?.classList.contains('codicon-file'), true);
++		assert.strictEqual(settingsButton.querySelector('.ribbon-item-icon')?.classList.contains('codicon-settings-gear'), true);
 +	});
 +
 +	test('automatically lays out built-in buttons in one, two, or three rows', () => {
@@ -2067,6 +2166,12 @@ index 0000000000000000000000000000000000000000..ba5231949bd7f45e5c45a5963d828ef7
 +			Array.from(fixture.querySelectorAll('.ribbon-group-title'), element => element.textContent),
 +			['First', 'Second'],
 +		);
++		const dropdown = fixture.querySelector<HTMLButtonElement>('.ribbon-group-dropdown')!;
++		assert.strictEqual(dropdown.children[0].classList.contains('ribbon-group-dropdown-icon'), true);
++		assert.strictEqual(dropdown.children[0].classList.contains('codicon-add'), true);
++		assert.strictEqual(dropdown.children[1].classList.contains('ribbon-group-dropdown-label'), true);
++		assert.strictEqual(dropdown.children[2].classList.contains('ribbon-group-dropdown-chevron'), true);
++		assert.strictEqual(dropdown.children[2].classList.contains('codicon-chevron-down'), true);
 +	});
 +
 +	test('renders full, half, and third-height contributed button layouts', () => {
@@ -2305,6 +2410,10 @@ index 0000000000000000000000000000000000000000..ba5231949bd7f45e5c45a5963d828ef7
 +		mainWindow.dispatchEvent(new mainWindow.Event('resize'));
 +
 +		assert.strictEqual(groups.querySelectorAll('.ribbon-group.folded').length, 3);
++		const foldedButtons = groups.querySelectorAll<HTMLButtonElement>('.ribbon-group-dropdown');
++		assert.strictEqual(Array.from(foldedButtons).every(button => button.children[0].classList.contains('codicon-file')), true);
++		assert.strictEqual(Array.from(foldedButtons).every(button => button.children[1].classList.contains('ribbon-group-dropdown-label')), true);
++		assert.strictEqual(Array.from(foldedButtons).every(button => button.children[2].classList.contains('ribbon-group-dropdown-chevron')), true);
 +		const left = fixture.querySelector<HTMLButtonElement>('.ribbon-scroll-button.left')!;
 +		const right = fixture.querySelector<HTMLButtonElement>('.ribbon-scroll-button.right')!;
 +		assert.strictEqual(left.hidden, true);
