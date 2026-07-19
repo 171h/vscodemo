@@ -1024,7 +1024,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6a94c7687
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/ribbonPart.ts
-@@ -0,0 +1,908 @@
+@@ -0,0 +1,913 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -1037,6 +1037,7 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +import { Codicon } from '../../../../base/common/codicons.js';
 +import { mnemonicButtonLabel } from '../../../../base/common/labels.js';
 +import { DisposableStore } from '../../../../base/common/lifecycle.js';
++import { language } from '../../../../base/common/platform.js';
 +import * as resources from '../../../../base/common/resources.js';
 +import { ThemeIcon } from '../../../../base/common/themables.js';
 +import { URI } from '../../../../base/common/uri.js';
@@ -1069,10 +1070,14 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +
 +type RibbonTab = IRegisteredRibbonTab | IBuiltinRibbonTab;
 +
++export function localizeRibbonLabel(key: string, defaultValue: string, zhHansValue: string, locale = language): string {
++	return locale.toLowerCase().startsWith('zh') ? zhHansValue : localize(key, defaultValue);
++}
++
 +const BUILTIN_TABS: readonly IBuiltinRibbonTab[] = [
-+	{ id: RibbonBuiltinTabId.File, title: localize('ribbon.file', "File"), order: 10, menuId: MenuId.MenubarFileMenu },
-+	{ id: RibbonBuiltinTabId.View, title: localize('ribbon.view', "View"), order: 20, menuId: MenuId.MenubarViewMenu },
-+	{ id: RibbonBuiltinTabId.Help, title: localize('ribbon.help', "Help"), order: 100, menuId: MenuId.MenubarHelpMenu },
++	{ id: RibbonBuiltinTabId.File, title: localizeRibbonLabel('ribbon.file', "File", "文件"), order: 10, menuId: MenuId.MenubarFileMenu },
++	{ id: RibbonBuiltinTabId.View, title: localizeRibbonLabel('ribbon.view', "View", "视图"), order: 20, menuId: MenuId.MenubarViewMenu },
++	{ id: RibbonBuiltinTabId.Help, title: localizeRibbonLabel('ribbon.help', "Help", "帮助"), order: 100, menuId: MenuId.MenubarHelpMenu },
 +];
 +
 +function isBuiltinTab(tab: RibbonTab): tab is IBuiltinRibbonTab {
@@ -1085,28 +1090,28 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +
 +function builtinGroupTitle(tab: IBuiltinRibbonTab, groupId: string, actions: readonly IAction[]): string {
 +	switch (`${tab.id}/${groupId}`) {
-+		case `${RibbonBuiltinTabId.File}/1_new`: return localize('ribbon.group.file.new', "New");
-+		case `${RibbonBuiltinTabId.File}/2_open`: return localize('ribbon.group.file.open', "Open");
-+		case `${RibbonBuiltinTabId.File}/3_workspace`: return localize('ribbon.group.file.workspace', "Workspace");
-+		case `${RibbonBuiltinTabId.File}/4_save`: return localize('ribbon.group.file.save', "Save");
-+		case `${RibbonBuiltinTabId.File}/45_share`: return localize('ribbon.group.file.share', "Share");
-+		case `${RibbonBuiltinTabId.File}/5_autosave`: return localize('ribbon.group.file.preferences', "Preferences");
-+		case `${RibbonBuiltinTabId.File}/6_close`: return localize('ribbon.group.file.close', "Close");
-+		case `${RibbonBuiltinTabId.File}/z_ConfirmClose`: return localize('ribbon.group.file.confirmClose', "Close Confirmation");
-+		case `${RibbonBuiltinTabId.File}/z_Exit`: return localize('ribbon.group.file.exit', "Exit");
-+		case `${RibbonBuiltinTabId.View}/1_open`: return localize('ribbon.group.view.open', "Open");
-+		case `${RibbonBuiltinTabId.View}/2_appearance`: return localize('ribbon.group.view.appearance', "Appearance");
-+		case `${RibbonBuiltinTabId.View}/3_sidebar`: return localize('ribbon.group.view.sidebar', "Primary Side Bar");
-+		case `${RibbonBuiltinTabId.View}/4_auxbar`: return localize('ribbon.group.view.auxiliaryBar', "Secondary Side Bar");
-+		case `${RibbonBuiltinTabId.View}/5_panel`: return localize('ribbon.group.view.panel', "Panel");
-+		case `${RibbonBuiltinTabId.View}/5_copilot`: return localize('ribbon.group.view.copilot', "Copilot");
-+		case `${RibbonBuiltinTabId.View}/6_editor`: return localize('ribbon.group.view.editor', "Editor");
-+		case `${RibbonBuiltinTabId.Help}/1_welcome`: return localize('ribbon.group.help.getStarted', "Get Started");
-+		case `${RibbonBuiltinTabId.Help}/2_reference`: return localize('ribbon.group.help.reference', "Documentation");
-+		case `${RibbonBuiltinTabId.Help}/3_feedback`: return localize('ribbon.group.help.feedback', "Feedback");
-+		case `${RibbonBuiltinTabId.Help}/4_legal`: return localize('ribbon.group.help.legal', "Legal");
-+		case `${RibbonBuiltinTabId.Help}/5_tools`: return localize('ribbon.group.help.tools', "Tools");
-+		case `${RibbonBuiltinTabId.Help}/z_about`: return localize('ribbon.group.help.about', "About");
++		case `${RibbonBuiltinTabId.File}/1_new`: return localizeRibbonLabel('ribbon.group.file.new', "New", "新建");
++		case `${RibbonBuiltinTabId.File}/2_open`: return localizeRibbonLabel('ribbon.group.file.open', "Open", "打开");
++		case `${RibbonBuiltinTabId.File}/3_workspace`: return localizeRibbonLabel('ribbon.group.file.workspace', "Workspace", "工作区");
++		case `${RibbonBuiltinTabId.File}/4_save`: return localizeRibbonLabel('ribbon.group.file.save', "Save", "保存");
++		case `${RibbonBuiltinTabId.File}/45_share`: return localizeRibbonLabel('ribbon.group.file.share', "Share", "共享");
++		case `${RibbonBuiltinTabId.File}/5_autosave`: return localizeRibbonLabel('ribbon.group.file.preferences', "Preferences", "首选项");
++		case `${RibbonBuiltinTabId.File}/6_close`: return localizeRibbonLabel('ribbon.group.file.close', "Close", "关闭");
++		case `${RibbonBuiltinTabId.File}/z_ConfirmClose`: return localizeRibbonLabel('ribbon.group.file.confirmClose', "Close Confirmation", "确认关闭");
++		case `${RibbonBuiltinTabId.File}/z_Exit`: return localizeRibbonLabel('ribbon.group.file.exit', "Exit", "退出");
++		case `${RibbonBuiltinTabId.View}/1_open`: return localizeRibbonLabel('ribbon.group.view.open', "Open", "打开");
++		case `${RibbonBuiltinTabId.View}/2_appearance`: return localizeRibbonLabel('ribbon.group.view.appearance', "Appearance", "外观");
++		case `${RibbonBuiltinTabId.View}/3_sidebar`: return localizeRibbonLabel('ribbon.group.view.sidebar', "Primary Side Bar", "主侧边栏");
++		case `${RibbonBuiltinTabId.View}/4_auxbar`: return localizeRibbonLabel('ribbon.group.view.auxiliaryBar', "Secondary Side Bar", "辅助侧边栏");
++		case `${RibbonBuiltinTabId.View}/5_panel`: return localizeRibbonLabel('ribbon.group.view.panel', "Panel", "面板");
++		case `${RibbonBuiltinTabId.View}/5_copilot`: return localizeRibbonLabel('ribbon.group.view.copilot', "Copilot", "Copilot");
++		case `${RibbonBuiltinTabId.View}/6_editor`: return localizeRibbonLabel('ribbon.group.view.editor', "Editor", "编辑器");
++		case `${RibbonBuiltinTabId.Help}/1_welcome`: return localizeRibbonLabel('ribbon.group.help.getStarted', "Get Started", "入门");
++		case `${RibbonBuiltinTabId.Help}/2_reference`: return localizeRibbonLabel('ribbon.group.help.reference', "Documentation", "文档");
++		case `${RibbonBuiltinTabId.Help}/3_feedback`: return localizeRibbonLabel('ribbon.group.help.feedback', "Feedback", "反馈");
++		case `${RibbonBuiltinTabId.Help}/4_legal`: return localizeRibbonLabel('ribbon.group.help.legal', "Legal", "法律");
++		case `${RibbonBuiltinTabId.Help}/5_tools`: return localizeRibbonLabel('ribbon.group.help.tools', "Tools", "工具");
++		case `${RibbonBuiltinTabId.Help}/z_about`: return localizeRibbonLabel('ribbon.group.help.about', "About", "关于");
 +	}
 +
 +	return mnemonicButtonLabel(actions[0]?.label ?? tab.title, true);
@@ -1993,7 +1998,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..ba5231949bd7f45e5c45a5963d828ef7ee68d137
 --- /dev/null
 +++ b/src/vs/workbench/test/browser/parts/ribbon/ribbonPart.test.ts
-@@ -0,0 +1,531 @@
+@@ -0,0 +1,536 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -2017,7 +2022,7 @@ index 0000000000000000000000000000000000000000..ba5231949bd7f45e5c45a5963d828ef7
 +import { TestStorageService } from '../../../common/workbenchTestServices.js';
 +import { TestLayoutService } from '../../workbenchTestServices.js';
 +import { IRegisteredRibbonTab, isReservedRibbonTabId, RibbonBuiltinTabId, ribbonRegistry } from '../../../../browser/parts/ribbon/ribbonExtensionPoint.js';
-+import { RibbonPart } from '../../../../browser/parts/ribbon/ribbonPart.js';
++import { localizeRibbonLabel, RibbonPart } from '../../../../browser/parts/ribbon/ribbonPart.js';
 +
 +suite('RibbonPart', () => {
 +	const disposables = new DisposableStore();
@@ -2085,6 +2090,11 @@ index 0000000000000000000000000000000000000000..ba5231949bd7f45e5c45a5963d828ef7
 +	function fileIcon(): HTMLElement {
 +		return fixture.getElementsByClassName('ribbon-file-icon').item(0) as HTMLElement;
 +	}
++
++	test('localizes built-in Ribbon labels for Chinese', () => {
++		assert.strictEqual(localizeRibbonLabel('ribbon.file', 'File', '文件', 'zh-cn'), '文件');
++		assert.strictEqual(localizeRibbonLabel('ribbon.group.file.new', 'New', '新建', 'zh-hans'), '新建');
++	});
 +
 +	test('keeps keyboard focus while selecting tabs and supports double click collapse', () => {
 +		const part = createPart();

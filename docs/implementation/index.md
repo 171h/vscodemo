@@ -11,6 +11,10 @@
 | `218-build-limit-minify-concurrency.patch` | 允许通过 `VSCODE_MINIFY_CONCURRENCY` 限制 minify 阶段的 esbuild 并发 | 防止 Windows hosted runner 在 `vscode-min-prepack` 阶段耗尽内存；不设置全局 `GOMEMLIMIT`，避免拖慢 tsgo |
 | `219-feature-ribbon-part.patch` | 新增全宽 Ribbon Part、折叠交互、内置 File/View/Help 标签、按菜单分隔线生成的命名功能组、`contributes.ribbon` 与回归测试；按钮支持全高、半高、三分之一高及纵向、纯图标、横向图文布局，可组成一至三行；全高图标占满标题外的可用高度，并以高优先级覆盖 Codicon 固定 16px 字号，紧凑图文垂直居中；支持 Office 风格分割下拉按钮、单体下拉按钮、带代表图标且纵向排列标题与箭头的折叠组按钮、同一 Context View 内带返回导航的递归 Ribbon 菜单项，以及在无脚本 sandbox iframe 中显示 HTML/CSS 静态内容；展开内容区高 98px；宽度不足时按声明逐级切换按钮尺寸/图文样式、将相近功能合并为下拉菜单，再从右向左逐组折叠，最后通过按边界显示的悬浮箭头无滚动条滚动 | 本分支唯一功能差异 |
 
+### `219-feature-ribbon-part.patch` 维护记录
+
+- 2026-07-19：内置 Ribbon tab 与内置菜单分组标题按当前界面语言显示；中文语言环境下 `File / View / Help` 与对应分组标题显示中文，非中文语言环境保留 VS Code 常规本地化结果。
+
 ## Ribbon 内部 API 登记
 
 | 内部 API / 耦合点 | 上游位置 | 用途 |
