@@ -173,6 +173,9 @@ cleanup() {
   if [[ -f "$TMP_DIR/windows-msi-variables.wxi" ]]; then
     cp "$TMP_DIR/windows-msi-variables.wxi" "$ROOT/vscodium/build/windows/msi/includes/vscodium-variables.wxi"
   fi
+  if [[ -f "$TMP_DIR/windows-visual-elements-manifest.xml" ]]; then
+    cp "$TMP_DIR/windows-visual-elements-manifest.xml" "$ROOT/vscodium/src/stable/resources/win32/VisualElementsManifest.xml"
+  fi
   if [[ -f "$TMP_DIR/windows-msi-vscodium.xsl" ]]; then
     cp "$TMP_DIR/windows-msi-vscodium.xsl" "$ROOT/vscodium/build/windows/msi/vscodium.xsl"
   fi
@@ -238,6 +241,14 @@ patch_windows_msi_script() {
     "$ROOT/vscodium/build/windows/msi/build.sh" \
     "$ROOT/vscodium/build/windows/msi/vscodium.wxs" \
     "$ROOT/vscodium/build/windows/msi/includes/vscodium-variables.wxi"
+}
+
+# VSCodium 的开始菜单磁贴清单不读取 product.json，而是把 ShortDisplayName
+# 直接写死为 VSCodium。构建前按最终 product 配置改写，并由 cleanup 恢复原文件。
+patch_windows_visual_elements_manifest() {
+  local manifest="vscodium/src/stable/resources/win32/VisualElementsManifest.xml"
+  cp "$manifest" "$TMP_DIR/windows-visual-elements-manifest.xml"
+  node scripts/lib/patch-windows-visual-elements.mjs "$ROOT/$manifest" "$ROOT/vscodium/product.json"
 }
 
 # 将 upstream.lock.json 锁定的 vscode tag/commit 写入 vscodium/upstream/stable.json
@@ -436,10 +447,11 @@ prepare_assets() {
 sync_user_patches        # 1. 同步补丁到 vscodium/patches/user/
 overlay_product_json     # 2. 叠加 VSCodemo 品牌覆盖
 patch_windows_msi_script # 3. MSI 打包脚本去 VSCodium 品牌化
-overlay_upstream_lock    # 4. 将 lock 文件的 vscode 版本注入 vscodium/upstream/
-prepare_vscodium_source  # 5. 检出/复用 vscodium/vscode 源码
-run_vscodium_build       # 6. VSCodium 构建（应用补丁 + 编译）
-prepare_assets           # 7. （可选）打包安装包并生成校验和
+patch_windows_visual_elements_manifest # 4. 修正 Windows 开始菜单磁贴标题
+overlay_upstream_lock    # 5. 将 lock 文件的 vscode 版本注入 vscodium/upstream/
+prepare_vscodium_source  # 6. 检出/复用 vscodium/vscode 源码
+run_vscodium_build       # 7. VSCodium 构建（应用补丁 + 编译）
+prepare_assets           # 8. （可选）打包安装包并生成校验和
 
 echo ""
 echo "构建完成。"
