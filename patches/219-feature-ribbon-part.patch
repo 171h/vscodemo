@@ -419,6 +419,10 @@ index 0000000000000000000000000000000000000000..c4a91275e96609ad8a3ad868e98eea5d
 +	box-shadow: 0 0 8px var(--vscode-widget-shadow);
 +}
 +
++.ribbon-scroll-button[hidden] {
++	display: none;
++}
++
 +.ribbon-scroll-button.left {
 +	left: 0;
 +}
