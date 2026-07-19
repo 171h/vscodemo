@@ -13,7 +13,7 @@ npm run watch
 ```
 
 另开终端，从 `vscode/` 运行 `./scripts/code.bat`。这个开发实例已经包含 Ribbon
-扩展点，但没有内置 `ext-engineer`，可作为 Extension Development Host 的宿主。
+扩展点，但不内置调试目标扩展，可作为 Extension Development Host 的宿主。
 
 ## 修改后的增量更新
 

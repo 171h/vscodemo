@@ -7,4 +7,4 @@
 `windows-identity.lock.json` 是 VSCodemo 的永久 Windows 安装身份。发布后不得重新
 生成；`scripts/build.sh` 会在构建前校验它与 product override 完全一致。
 
-此分支默认禁用自动更新，防止调试宿主被不含 Ribbon 扩展点的官方 VSCodium 覆盖。
+VSCodemo 默认禁用自动更新，防止调试宿主被不含 Ribbon 扩展点的官方 VSCodium 覆盖。

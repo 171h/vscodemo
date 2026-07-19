@@ -1,4 +1,4 @@
-# only-ribbon 补丁
+# VSCodemo 补丁
 
 本目录只允许三类补丁：
 

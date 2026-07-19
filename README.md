@@ -1,13 +1,12 @@
-# VSCodemo（only-ribbon）
+# VSCodemo
 
-本分支构建一个用于扩展开发与调试的专用 VS Code 宿主。它以 VSCodium 构建链为
-基础，仅保留 `main` 中的 Ribbon 能力，并把产品名改为 `VSCodemo`。
+VSCodemo 是一个用于扩展开发与调试的专用 VS Code 宿主。它以 VSCodium 构建链为
+基础，提供 Ribbon 能力，并将产品名设为 `VSCodemo`。
 
-与 `main` 相比，本分支不包含 VSCodemo 的界面裁剪、默认语言、菜单改造、
-ActivityBar/Panel 改造或自研内置扩展。`ext-engineer` 也不会内置到产物中，避免
-通过 Extension Development Host 调试时同时加载两个副本。
+调试目标扩展不应内置到产物中，避免通过 Extension Development Host 调试时同时加载
+两个副本。
 
-## 保留的差异
+## 核心组成
 
 - `patches/219-feature-ribbon-part.patch`：新增 Ribbon Part 和
   `contributes.ribbon` 扩展点。
@@ -34,8 +33,8 @@ cd vscode
 ./scripts/code.bat
 ```
 
-随后在 `ext-engineer` 仓库中使用扩展调试配置，将 Extension Development Host
-指向这个已应用 Ribbon 补丁的 `vscode` 检出或 VSCodemo 构建产物。
+随后在目标扩展仓库中使用扩展调试配置，将 Extension Development Host 指向这个已应用
+Ribbon 补丁的 `vscode` 检出或 VSCodemo 构建产物。
 
 ## 发行构建
 
