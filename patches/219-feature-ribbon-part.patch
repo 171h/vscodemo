@@ -954,10 +954,10 @@ index 0000000000000000000000000000000000000000..595d553faa13b35b251903437d26c19a
 
 diff --git a/src/vs/workbench/browser/parts/ribbon/ribbonExtensionPoint.ts b/src/vs/workbench/browser/parts/ribbon/ribbonExtensionPoint.ts
 new file mode 100644
-index 0000000000000000000000000000000000000000..4bfd0e2efdcee3c23d28bf2ef620ecf87766d6d5
+index 0000000000000000000000000000000000000000..d842094c574e1488e9f709dd920ef53658588692
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/ribbonExtensionPoint.ts
-@@ -0,0 +1,334 @@
+@@ -0,0 +1,342 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -1031,6 +1031,14 @@ index 0000000000000000000000000000000000000000..4bfd0e2efdcee3c23d28bf2ef620ecf8
 +	readonly order?: number;
 +	readonly when?: string;
 +	readonly arguments?: readonly unknown[];
++	/*
++	 * 声明式 contribution 来自 package.json 的 JSON 解析结果，扩展作者可能
++	 * 携带额外自定义字段。index signature 让本接口与 IRibbonPanelItem 结构
++	 * 兼容——后者用于运行时 showPanelDropdown 的描述符；声明式 panel 布局
++	 * （layout: 'panel'）会把 IRibbonItemContribution[] 透传给 panel 渲染，
++	 * 没有 index signature 会导致 TS 拒绝赋值（TS2322）。
++	 */
++	[key: string]: unknown;
 +}
 +
 +export interface IRibbonGroupContribution {
@@ -1292,12 +1300,13 @@ index 0000000000000000000000000000000000000000..4bfd0e2efdcee3c23d28bf2ef620ecf8
 +	tabs.sort((a, b) => orderOf(a) - orderOf(b) || a.extensionId.localeCompare(b.extensionId) || a.id.localeCompare(b.id));
 +	ribbonRegistry.setTabs(tabs);
 +});
+
 diff --git a/src/vs/workbench/browser/parts/ribbon/ribbonPart.ts b/src/vs/workbench/browser/parts/ribbon/ribbonPart.ts
 new file mode 100644
-index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6a94c7687
+index 0000000000000000000000000000000000000000..485da00c6749ff0ddf70e7c768fdfa8ad2c64409
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/ribbonPart.ts
-@@ -0,0 +1,1247 @@
+@@ -0,0 +1,1238 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -1526,14 +1535,13 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +	/*
 +	 * 当前已打开的下拉状态。所有下拉（折叠分组下拉 showFoldedGroupDropdown、
 +	 * 扩展菜单 showContributionMenu、Word 风格面板 showPanelDropdown）都走
-+	 * IContextViewService 同一单例，用 anchor 引用 + menuId 做 toggle 判定。
++	 * IContextViewService 同一单例，用 anchor 引用做 toggle 判定。
 +	 * selectTab/render/renderActiveContent/refreshActiveContent/showOverlay
 +	 * 重建 DOM 前会调 closeOpenMenu（→ hideContextView）并清空此状态，避免
 +	 * "旧的收了、新的没弹"；折叠分组下拉的 onHide 还负责把借出的 .ribbon-items
 +	 * 节点还回原分组。
 +	 */
 +	private openMenuAnchor: HTMLElement | undefined;
-+	private openMenuId: string | undefined;
 +	/*
 +	 * 当前打开的 ContextView 下拉种类标记。当前只有 'contextView'：
 +	 * 折叠分组下拉 / 扩展菜单 / Word 风格面板下拉都走 IContextViewService
@@ -2156,14 +2164,12 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +		 * 返回（toggle）；否则先把旧 view 关掉再 show，确保切换时新菜单一定会弹
 +		 * 出来，避免上游 ContextView 在 anchor 被销毁时静默吞掉新的 show 调用。
 +		 */
-+		const menuId = `contribution:${tab.id}:${anchor.dataset.menuId ?? ''}`;
 +		if (this.openMenuKind === 'contextView' && this.openMenuAnchor === anchor) {
 +			this.closeOpenMenu();
 +			return;
 +		}
 +		this.closeOpenMenu();
 +		this.openMenuAnchor = anchor;
-+		this.openMenuId = menuId;
 +		this.openMenuKind = 'contextView';
 +		if (menu.layout === 'panel') {
 +			/*
@@ -2238,7 +2244,6 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +			onHide: () => {
 +				if (this.openMenuAnchor === anchor) {
 +					this.openMenuAnchor = undefined;
-+					this.openMenuId = undefined;
 +					this.openMenuKind = undefined;
 +				}
 +			},
@@ -2261,7 +2266,6 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +			this.contextViewService.hideContextView();
 +		}
 +		this.openMenuAnchor = undefined;
-+		this.openMenuId = undefined;
 +		this.openMenuKind = undefined;
 +	}
 +
@@ -2303,7 +2307,6 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +		}
 +		this.closeOpenMenu();
 +		this.openMenuAnchor = anchor;
-+		this.openMenuId = `folded:${title}`;
 +		this.openMenuKind = 'contextView';
 +		/*
 +		 * 占位节点：用 <template> 而非 <div>，避免被 .ribbon-group 的子选择器
@@ -2338,7 +2341,6 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +				}
 +				if (this.openMenuAnchor === anchor) {
 +					this.openMenuAnchor = undefined;
-+					this.openMenuId = undefined;
 +					this.openMenuKind = undefined;
 +				}
 +			},
@@ -2366,7 +2368,6 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +	showPanelDropdown(anchor: HTMLElement, descriptor: IRibbonPanelDescriptor, externalStore?: DisposableStore): IRibbonPanelHandle {
 +		this.closeOpenMenu();
 +		this.openMenuAnchor = anchor;
-+		this.openMenuId = `panel:${descriptor.title ?? ''}`;
 +		this.openMenuKind = 'contextView';
 +		const panelStore = externalStore ?? new DisposableStore();
 +		const columns = Math.min(8, Math.max(1, descriptor.columns ?? 3));
@@ -2423,7 +2424,6 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +			onHide: () => {
 +				if (this.openMenuAnchor === anchor) {
 +					this.openMenuAnchor = undefined;
-+					this.openMenuId = undefined;
 +					this.openMenuKind = undefined;
 +				}
 +			},
