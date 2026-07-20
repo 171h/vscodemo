@@ -259,7 +259,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..595d553faa13b35b251903437d26c19a5b2dc84b
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/media/ribbonpart.css
-@@ -0,0 +1,445 @@
+@@ -0,0 +1,465 @@
 +.monaco-workbench .part.ribbon {
 +	background: var(--vscode-editor-background);
 +	color: var(--vscode-foreground);
@@ -495,6 +495,7 @@ index 0000000000000000000000000000000000000000..595d553faa13b35b251903437d26c19a
 +
 +.ribbon-item-vertical {
 +	flex-direction: column;
++	justify-content: flex-start;
 +	min-width: 62px;
 +	max-width: 118px;
 +	padding-right: 2px;
@@ -538,11 +539,10 @@ index 0000000000000000000000000000000000000000..595d553faa13b35b251903437d26c19a
 +}
 +
 +.ribbon-item-vertical .ribbon-item-icon {
-+	--ribbon-icon-size: calc(var(--ribbon-item-full-height) - 19px);
-+	flex: 1 1 0;
-+	width: 100%;
-+	height: auto;
-+	min-height: 0;
++	--ribbon-icon-size: 40px;
++	flex: 0 0 auto;
++	width: 40px;
++	height: 40px;
 +}
 +
 +.ribbon-item-half .ribbon-item-icon {
@@ -583,6 +583,7 @@ index 0000000000000000000000000000000000000000..595d553faa13b35b251903437d26c19a
 +.ribbon-dropdown-item {
 +	display: flex;
 +	flex-direction: column;
++	justify-content: flex-start;
 +	min-width: 68px;
 +	max-width: 128px;
 +	padding: 0;
@@ -603,18 +604,17 @@ index 0000000000000000000000000000000000000000..595d553faa13b35b251903437d26c19a
 +
 +.ribbon-dropdown-primary,
 +.ribbon-dropdown-single {
-+	flex: 1 1 0;
++	flex: 0 0 auto;
 +	flex-direction: column;
 +	min-height: 0;
 +}
 +
 +.ribbon-dropdown-primary .ribbon-item-icon,
 +.ribbon-dropdown-single > .ribbon-item-icon {
-+	--ribbon-icon-size: calc(var(--ribbon-item-full-height) - 22px);
-+	flex: 1 1 0;
-+	width: 100%;
-+	height: auto;
-+	min-height: 0;
++	--ribbon-icon-size: 40px;
++	flex: 0 0 auto;
++	width: 40px;
++	height: 40px;
 +}
 +
 +.ribbon-dropdown-primary:disabled {
@@ -629,6 +629,26 @@ index 0000000000000000000000000000000000000000..595d553faa13b35b251903437d26c19a
 +	justify-content: center;
 +	gap: 3px;
 +	min-height: 22px;
++}
++
++/*
++ * Chevron alignment depends on how many lines the label wraps to at the current
++ * group width. Single-line labels stack the chevron below the label (column) so
++ * every chevron sits on the same horizontal baseline near the button bottom;
++ * double-line labels keep the chevron on the right (row) to avoid pushing it
++ * past the ribbon panel when the second line eats the remaining vertical space.
++ * The line-count class is added at render time by watchRibbonLabelLines().
++ */
++.ribbon-dropdown-trigger.ribbon-label-single,
++.ribbon-dropdown-footer.ribbon-label-single {
++	flex-direction: column;
++	gap: 1px;
++}
++
++.ribbon-dropdown-trigger.ribbon-label-double,
++.ribbon-dropdown-footer.ribbon-label-double {
++	flex-direction: row;
++	align-items: flex-end;
 +}
 +
 +.ribbon-dropdown-trigger {
@@ -1031,7 +1051,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6a94c7687
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/ribbonPart.ts
-@@ -0,0 +1,915 @@
+@@ -0,0 +1,943 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -1756,7 +1776,7 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +			primary.disabled = !enabled;
 +			primary.setAttribute('aria-label', localize('ribbon.runCommand', "Run {0}", item.title));
 +			this.renderContributionIcon(append(primary, $('.ribbon-item-icon')), tab, item);
-+			const trigger = this.createDropdownTrigger(split, item.title);
++			const trigger = this.createDropdownTrigger(split, item.title, store);
 +			store.add(addDisposableListener(primary, EventType.CLICK, () => this.runContributionCommand(item, closeAfterRun)));
 +			store.add(addDisposableListener(trigger, EventType.CLICK, () => openMenu(trigger)));
 +			return enabled ? primary : trigger;
@@ -1770,18 +1790,46 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +		const footer = append(button, $('.ribbon-dropdown-footer'));
 +		append(footer, $('span.ribbon-item-label')).textContent = item.title;
 +		append(footer, $('.codicon.codicon-chevron-down'));
++		this.watchRibbonLabelLines(footer, store);
 +		store.add(addDisposableListener(button, EventType.CLICK, () => openMenu(button)));
 +		return button;
 +	}
 +
-+	private createDropdownTrigger(parent: HTMLElement, title: string): HTMLButtonElement {
++	private createDropdownTrigger(parent: HTMLElement, title: string, store: DisposableStore): HTMLButtonElement {
 +		const trigger = append(parent, $<HTMLButtonElement>('button.ribbon-dropdown-trigger'));
 +		trigger.type = 'button';
 +		trigger.setAttribute('aria-label', localize('ribbon.openItemMenu', "Open {0} menu", title));
 +		trigger.setAttribute('aria-haspopup', 'dialog');
 +		append(trigger, $('span.ribbon-item-label')).textContent = title;
 +		append(trigger, $('.codicon.codicon-chevron-down'));
++		this.watchRibbonLabelLines(trigger, store);
 +		return trigger;
++	}
++
++	/*
++	 * Toggles `ribbon-label-single` / `ribbon-label-double` on a dropdown trigger
++	 * or footer based on whether its label wraps to a second line at the current
++	 * layout. Recomputes on resize via ResizeObserver so the chevron keeps its
++	 * horizontal alignment as the group width changes.
++	 */
++	private watchRibbonLabelLines(container: HTMLElement, store: DisposableStore): void {
++		const label = container.querySelector<HTMLElement>('.ribbon-item-label');
++		if (!label) {
++			return;
++		}
++		const apply = () => {
++			const isDoubleLine = label.offsetHeight > 15;
++			container.classList.toggle('ribbon-label-single', !isDoubleLine);
++			container.classList.toggle('ribbon-label-double', isDoubleLine);
++		};
++		apply();
++		store.add(addDisposableListener(getWindow(container), EventType.RESIZE, apply));
++		const ResizeObserverCtor = getWindow(container).ResizeObserver;
++		if (ResizeObserverCtor) {
++			const observer = new ResizeObserverCtor(apply);
++			observer.observe(label);
++			store.add({ dispose: () => observer.disconnect() });
++		}
 +	}
 +
 +	private isContributionCommandEnabled(commandId: string | undefined): boolean {
