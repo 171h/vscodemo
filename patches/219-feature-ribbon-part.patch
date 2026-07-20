@@ -1297,7 +1297,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6a94c7687
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/ribbonPart.ts
-@@ -0,0 +1,1232 @@
+@@ -0,0 +1,1247 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -1534,7 +1534,16 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +	 */
 +	private openMenuAnchor: HTMLElement | undefined;
 +	private openMenuId: string | undefined;
-+	private openMenuKind: 'contextView' | 'contextMenu' | undefined;
++	/*
++	 * 当前打开的 ContextView 下拉种类标记。当前只有 'contextView'：
++	 * 折叠分组下拉 / 扩展菜单 / Word 风格面板下拉都走 IContextViewService
++	 * 单例，由 hideContextView() 一并收起。内置 SubmenuAction 子菜单走的是
++	 * IContextMenuService（renderActionGroup 中），由它自己的
++	 * onDidHideContextMenu 生命周期管理，不纳入统一 toggle 跟踪——用户点击
++	 * 其它下拉或 selectTab 触发 closeOpenMenu 时，SubmenuAction 子菜单会跟
++	 * 随 ContextView 单例的隐藏被 IContextMenuService 内部联动收起。
++	 */
++	private openMenuKind: 'contextView' | undefined;
 +
 +	constructor(
 +		@IThemeService themeService: IThemeService,
@@ -2240,9 +2249,15 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +	 * 主动收起当前打开的下拉菜单（折叠分组下拉 / 扩展面板下拉 / 内置 tab 折叠
 +	 * 下拉）。三类都最终走 ContextView 单例，hideContextView() 会把它们一并收
 +	 * 起。状态字段一并清空，方便下次 show 时的 toggle 判定从干净状态出发。
++	 *
++	 * 注意：这里只覆盖 ContextView 单例下拉。内置 SubmenuAction 子菜单
++	 * （renderActionGroup 中走 IContextMenuService.showContextMenu）有自己的
++	 * 生命周期，由 IContextMenuService 在 ContextView 隐藏时联动收起，因此不
++	 * 纳入 openMenuKind 跟踪——历史上曾有 'contextMenu' 分支，但在改用
++	 * IContextViewService 后变成死代码，已删除以避免注释与实现不一致。
 +	 */
 +	private closeOpenMenu(): void {
-+		if (this.openMenuKind === 'contextView' || this.openMenuKind === 'contextMenu') {
++		if (this.openMenuKind === 'contextView') {
 +			this.contextViewService.hideContextView();
 +		}
 +		this.openMenuAnchor = undefined;
