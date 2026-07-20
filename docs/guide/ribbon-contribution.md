@@ -164,7 +164,7 @@ contributes.ribbon
 | `command` | 条件必填 | `button`、`splitButton` 必填；`contributes.commands` 中已注册的命令 ID |
 | `title` | 是 | 按钮文案和无障碍标签；`icon` 样式下不显示文案 |
 | `icon` | 是 | Codicon、扩展相对资源路径或深浅主题资源对象 |
-| `menu` | 条件必填 | `splitButton`、`dropdown` 的菜单内容，可包含 `items` 和/或 `custom` |
+| `menu` | 条件必填 | `splitButton`、`dropdown` 的菜单内容，可包含 `items` 和/或 `custom`；还可通过 `layout` 选择竖排菜单或 Word 风格面板（见 [Word 风格面板下拉](#word-风格面板下拉)） |
 | `size` | 否 | `full`、`half` 或 `third`，缺省为 `full` |
 | `style` | 否 | 紧凑按钮使用 `icon` 或 `iconAndLabel`，缺省为 `iconAndLabel` |
 | `responsive` | 否 | 宽度不足时依次尝试的 `{ size, style? }` 布局数组 |
@@ -332,6 +332,165 @@ View 或丢失锚点。功能组因宽度不足折叠时，也会保留这些组
 被 CSP 阻止。需要交互或执行命令时应使用声明式 `menu.items`。`menu.items` 与
 `menu.custom` 可以同时存在，此时先显示可交互的 Ribbon 组件，再显示静态自定义区域。
 
+## Word 风格面板下拉
+
+下拉按钮（`splitButton` 或单体 `dropdown`）默认弹出竖排命令列表。当一次点击需要暴露
+多个并列命令、又希望每个命令都显示大图标和标题时，把 `menu.layout` 设为 `'panel'`，
+弹层会变成 Word 风格的紧凑面板：带可选标题栏，内部按 `columns` 把命令排成网格，每个
+命令以「大图标在上、标题在下」的形式呈现，可附加静态 HTML 说明区。
+
+`layout: 'panel'` 适合：
+
+- 同一组操作有多个并列入口（如「插入表格 / 图片 / 公式 / 脚注」），用网格比竖排列表
+  更紧凑、更易扫视；
+- 需要在命令旁边附上一段说明、图例或预览，可用 `custom` 附加静态内容。
+
+折叠分组下拉（功能组因窗口宽度不足被合并为下拉时）声明了 `layout: 'panel'` 时，分组
+内的 `items` 也会按面板网格显示。内置 `File / View / Help` 标签不读取 `layout`，仍按
+竖排菜单显示。
+
+### `menu` 面板字段
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| `layout` | 否 | `'menu'`（缺省，竖排命令列表）或 `'panel'`（Word 风格面板） |
+| `title` | 否 | `layout: 'panel'` 时面板顶部的标题栏文案，推荐使用 `%nls.key%`；省略则不显示标题栏 |
+| `columns` | 否 | `layout: 'panel'` 时网格列数，取值 1–8，缺省 3 |
+| `items` | 否 | 面板内的命令项；与竖排菜单使用同一格式，可直接复用已有声明 |
+| `custom` | 否 | 与竖排菜单相同的 sandbox iframe 静态内容；可与 `items` 同时存在，显示在命令网格之后 |
+
+`items` 复用 [下拉菜单组件](#下拉菜单组件) 中介绍的 item 格式，因此把竖排菜单切换成
+面板通常只需要在 `menu` 上加 `"layout": "panel"`，必要时再配 `title` 与 `columns`。
+
+### 完整示例
+
+下面是一个「插入」分割按钮：上方主按钮直接插入符号，点击下方箭头展开 Word 风格面板，
+面板带标题、3 列网格的 4 个插入命令，并在命令下方附上一段静态提示。
+
+```jsonc
+// package.json
+{
+  "contributes": {
+    "commands": [
+      { "command": "publisher.extension.insertSymbol",  "title": "%commands.insertSymbol%",  "category": "Insert" },
+      { "command": "publisher.extension.insertSection", "title": "%commands.insertSection%", "category": "Insert" },
+      { "command": "publisher.extension.insertTable",   "title": "%commands.insertTable%",   "category": "Insert" },
+      { "command": "publisher.extension.insertImage",   "title": "%commands.insertImage%",   "category": "Insert" },
+      { "command": "publisher.extension.insertFootnote","title": "%commands.insertFootnote%","category": "Insert" }
+    ],
+    "ribbon": {
+      "tabs": [{
+        "id": "publisher.extension.ribbon.insert",
+        "title": "%ribbon.insert.title%",
+        "groups": [{
+          "id": "insert",
+          "title": "%ribbon.insert.group%",
+          "items": [{
+            "type": "splitButton",
+            "command": "publisher.extension.insertSymbol",
+            "title": "%ribbon.insert.symbol%",
+            "icon": "$(symbol)",
+            "menu": {
+              "layout": "panel",
+              "title": "%ribbon.insert.panelTitle%",
+              "columns": 3,
+              "items": [
+                {
+                  "command": "publisher.extension.insertSection",
+                  "title": "%ribbon.insert.section%",
+                  "icon": "$(layout-sidebar-left)"
+                },
+                {
+                  "command": "publisher.extension.insertTable",
+                  "title": "%ribbon.insert.table%",
+                  "icon": "$(table)"
+                },
+                {
+                  "command": "publisher.extension.insertImage",
+                  "title": "%ribbon.insert.image%",
+                  "icon": "$(file-media)"
+                },
+                {
+                  "command": "publisher.extension.insertFootnote",
+                  "title": "%ribbon.insert.footnote%",
+                  "icon": "$(comment)"
+                }
+              ],
+              "custom": {
+                "width": 360,
+                "height": 80,
+                "html": "<p>%ribbon.insert.tip%</p>",
+                "css": "body { font-size: 11px; opacity: 0.85; padding: 6px 4px }"
+              }
+            }
+          }]
+        }]
+      }]
+    }
+  }
+}
+```
+
+```jsonc
+// package.nls.json
+{
+  "commands.insertSymbol": "Insert Symbol",
+  "commands.insertSection": "Insert Section",
+  "commands.insertTable": "Insert Table",
+  "commands.insertImage": "Insert Image",
+  "commands.insertFootnote": "Insert Footnote",
+  "ribbon.insert.title": "Insert",
+  "ribbon.insert.group": "Insert",
+  "ribbon.insert.symbol": "Symbol",
+  "ribbon.insert.panelTitle": "Insert",
+  "ribbon.insert.section": "Section",
+  "ribbon.insert.table": "Table",
+  "ribbon.insert.image": "Image",
+  "ribbon.insert.footnote": "Footnote",
+  "ribbon.insert.tip": "Tip: click an icon to insert at the cursor."
+}
+```
+
+```jsonc
+// package.nls.zh.json
+{
+  "commands.insertSymbol": "插入符号",
+  "commands.insertSection": "插入分节",
+  "commands.insertTable": "插入表格",
+  "commands.insertImage": "插入图片",
+  "commands.insertFootnote": "插入脚注",
+  "ribbon.insert.title": "插入",
+  "ribbon.insert.group": "插入",
+  "ribbon.insert.symbol": "符号",
+  "ribbon.insert.panelTitle": "插入",
+  "ribbon.insert.section": "分节",
+  "ribbon.insert.table": "表格",
+  "ribbon.insert.image": "图片",
+  "ribbon.insert.footnote": "脚注",
+  "ribbon.insert.tip": "提示：点击图标在光标处插入。"
+}
+```
+
+### `items` 在面板里的呈现
+
+面板里的每个 `items` 条目都会以「大图标在上、标题在下」的方形格子形式呈现，与 Ribbon
+主区域使用的 `size` / `style` 无关：
+
+- 不需要为面板单独声明 `size: 'full'`；竖排菜单里写过的 `half` / `third` 在面板里都
+  会以同一格子规格显示，可保持原声明不变；
+- `style: 'icon'` 与 `style: 'iconAndLabel'` 的差异在面板里被忽略，统一显示标题；
+- 命令的 `when` 与 `enablement` 仍然生效：被 `when` 排除的项不显示，precondition 不
+  满足的项以禁用状态显示。
+
+### 何时用面板、何时用竖排菜单
+
+- **用面板**：命令之间是并列关系，且命令数量较多（一般 4 个及以上）、希望每个命令都
+  带大图标和完整标题。
+- **用竖排菜单（缺省 `layout`）**：命令之间是层级或顺序关系，需要分组、嵌套子菜单、
+  「返回上一级」导航；面板不支持递归嵌套。
+- 面板与竖排菜单的开关行为一致：切换标签、点击 Ribbon 上其它按钮、点击面板外部或按
+  `Escape` 都会关闭面板；同时只会有一个面板或菜单打开。
+
 ## `when` 与命令可用状态
 
 标签、分组和按钮上的 `when` 决定元素是否可见，语法与 VS Code 的 Context Key
@@ -395,6 +554,10 @@ Ribbon 按钮 ────────────────┘
 - 展开和折叠 Ribbon 后都已手工点击按钮；折叠模式下命令执行后覆盖层能正常关闭。
 - 窄窗口下已验证声明的 `responsive` 顺序、`responsiveMenu` 合并，以及分组折叠入口的
   代表图标；滚动到两端时，对应悬浮滚动按钮会隐藏。
+- `splitButton` / `dropdown` / 折叠分组声明了 `menu.layout: 'panel'` 时，面板已正确
+  显示标题（若声明）、网格按 `columns` 排布、`items` 与 `custom` 共存时顺序正确；
+  切换标签或点击其它按钮后面板能自动关闭，多个面板之间切换不会出现「旧的收了、新的
+  没弹」。
 - 禁用或卸载扩展后，其 Ribbon contribution 能正常消失。
 
 ## 常见问题
@@ -420,3 +583,11 @@ VSIX 是否包含该资源。不要使用工作区绝对路径。
 确认 `items[].command` 与 `contributes.commands[].command` 完全一致，并确认命令的
 注册和扩展激活事件仍然有效。Ribbon 是声明式入口，不会替扩展注册命令，也不会单独
 激活扩展。
+
+### 面板下拉看起来像普通菜单
+
+通常是因为 `menu.layout` 写错或漏写：缺省值是 `'menu'`（竖排命令列表），必须显式声明
+`"layout": "panel"` 才会切换到 Word 风格面板。同时确认 `columns` 在 1–8 范围内，
+否则会被夹紧到缺省值 3。若希望面板有更明显的视觉边界，可以同时声明 `title` 让面板
+顶部出现标题栏与关闭按钮。内置 `File / View / Help` 标签的折叠下拉不读取 `layout`，
+始终按菜单实现渲染。
