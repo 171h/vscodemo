@@ -259,7 +259,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..595d553faa13b35b251903437d26c19a5b2dc84b
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/media/ribbonpart.css
-@@ -0,0 +1,445 @@
+@@ -0,0 +1,691 @@
 +.monaco-workbench .part.ribbon {
 +	background: var(--vscode-editor-background);
 +	color: var(--vscode-foreground);
@@ -495,6 +495,7 @@ index 0000000000000000000000000000000000000000..595d553faa13b35b251903437d26c19a
 +
 +.ribbon-item-vertical {
 +	flex-direction: column;
++	justify-content: flex-start;
 +	min-width: 62px;
 +	max-width: 118px;
 +	padding-right: 2px;
@@ -538,11 +539,10 @@ index 0000000000000000000000000000000000000000..595d553faa13b35b251903437d26c19a
 +}
 +
 +.ribbon-item-vertical .ribbon-item-icon {
-+	--ribbon-icon-size: calc(var(--ribbon-item-full-height) - 19px);
-+	flex: 1 1 0;
-+	width: 100%;
-+	height: auto;
-+	min-height: 0;
++	--ribbon-icon-size: 40px;
++	flex: 0 0 auto;
++	width: 40px;
++	height: 40px;
 +}
 +
 +.ribbon-item-half .ribbon-item-icon {
@@ -583,6 +583,7 @@ index 0000000000000000000000000000000000000000..595d553faa13b35b251903437d26c19a
 +.ribbon-dropdown-item {
 +	display: flex;
 +	flex-direction: column;
++	justify-content: flex-start;
 +	min-width: 68px;
 +	max-width: 128px;
 +	padding: 0;
@@ -603,18 +604,17 @@ index 0000000000000000000000000000000000000000..595d553faa13b35b251903437d26c19a
 +
 +.ribbon-dropdown-primary,
 +.ribbon-dropdown-single {
-+	flex: 1 1 0;
++	flex: 0 0 auto;
 +	flex-direction: column;
 +	min-height: 0;
 +}
 +
 +.ribbon-dropdown-primary .ribbon-item-icon,
 +.ribbon-dropdown-single > .ribbon-item-icon {
-+	--ribbon-icon-size: calc(var(--ribbon-item-full-height) - 22px);
-+	flex: 1 1 0;
-+	width: 100%;
-+	height: auto;
-+	min-height: 0;
++	--ribbon-icon-size: 40px;
++	flex: 0 0 auto;
++	width: 40px;
++	height: 40px;
 +}
 +
 +.ribbon-dropdown-primary:disabled {
@@ -629,6 +629,26 @@ index 0000000000000000000000000000000000000000..595d553faa13b35b251903437d26c19a
 +	justify-content: center;
 +	gap: 3px;
 +	min-height: 22px;
++}
++
++/*
++ * Chevron alignment depends on how many lines the label wraps to at the current
++ * group width. Single-line labels stack the chevron below the label (column) so
++ * every chevron sits on the same horizontal baseline near the button bottom;
++ * double-line labels keep the chevron on the right (row) to avoid pushing it
++ * past the ribbon panel when the second line eats the remaining vertical space.
++ * The line-count class is added at render time by watchRibbonLabelLines().
++ */
++.ribbon-dropdown-trigger.ribbon-label-single,
++.ribbon-dropdown-footer.ribbon-label-single {
++	flex-direction: column;
++	gap: 1px;
++}
++
++.ribbon-dropdown-trigger.ribbon-label-double,
++.ribbon-dropdown-footer.ribbon-label-double {
++	flex-direction: row;
++	align-items: flex-end;
 +}
 +
 +.ribbon-dropdown-trigger {
@@ -705,12 +725,239 @@ index 0000000000000000000000000000000000000000..595d553faa13b35b251903437d26c19a
 +.ribbon-root.collapsed .ribbon-tabs {
 +	border-bottom: 0;
 +}
++
++/*
++ * ============================================================================
++ * Ribbon 面板下拉（Word 风格紧凑面板）
++ * ----------------------------------------------------------------------------
++ * 与竖排 .ribbon-item-menu 的区别：使用一套专用色板 --vscode-ribbon-dropdown-*
++ * （在 :root 提供 fallback，主题包可覆盖），不依赖 --vscode-menu-*，避免观
++ * 感被误认为"菜单栏"。结构见 RibbonPart.showPanelDropdown 的注释。
++ * ============================================================================
++ */
++.monaco-workbench {
++	--vscode-ribbon-dropdown-background: var(--vscode-editorHoverWidget-background, var(--vscode-editor-background));
++	--vscode-ribbon-dropdown-foreground: var(--vscode-editorHoverWidget-foreground, var(--vscode-foreground));
++	--vscode-ribbon-dropdown-border: var(--vscode-editorHoverWidget-border, var(--vscode-panel-border));
++	--vscode-ribbon-dropdown-shadow: var(--vscode-widget-shadow, rgba(0, 0, 0, 0.36));
++	--vscode-ribbon-dropdown-headerBackground: var(--vscode-editorHoverWidget-statusBarBackground, transparent);
++	--vscode-ribbon-dropdown-sectionTitle: var(--vscode-descriptionForeground);
++	--vscode-ribbon-dropdown-hoverBackground: var(--vscode-list-hoverBackground);
++	--vscode-ribbon-dropdown-activeBackground: var(--vscode-list-activeSelectionBackground);
++	--vscode-ribbon-dropdown-activeForeground: var(--vscode-list-activeSelectionForeground);
++	--vscode-ribbon-dropdown-separator: var(--vscode-editorHoverWidget-border, var(--vscode-panel-border));
++}
++
++.ribbon-panel-dropdown {
++	min-width: 220px;
++	max-width: min(720px, calc(100vw - 24px));
++	max-height: min(640px, calc(100vh - 24px));
++	overflow: auto;
++	background: var(--vscode-ribbon-dropdown-background);
++	color: var(--vscode-ribbon-dropdown-foreground);
++	border: 1px solid var(--vscode-ribbon-dropdown-border);
++	border-radius: 4px;
++	box-shadow: 0 6px 16px var(--vscode-ribbon-dropdown-shadow);
++	padding: 0;
++}
++
++.ribbon-panel-header {
++	display: flex;
++	align-items: center;
++	justify-content: space-between;
++	gap: 8px;
++	min-height: 30px;
++	padding: 6px 10px;
++	background: var(--vscode-ribbon-dropdown-headerBackground);
++	border-bottom: 1px solid var(--vscode-ribbon-dropdown-separator);
++	border-radius: 4px 4px 0 0;
++}
++
++.ribbon-panel-title {
++	font-size: 12px;
++	font-weight: 600;
++	text-transform: uppercase;
++	letter-spacing: 0.04em;
++	opacity: 0.9;
++}
++
++.ribbon-panel-close {
++	width: 22px;
++	height: 22px;
++	padding: 0;
++	border: 0;
++	background: transparent;
++	color: inherit;
++	cursor: pointer;
++	font-size: 14px;
++	line-height: 1;
++	border-radius: 3px;
++}
++
++.ribbon-panel-close:hover {
++	background: var(--vscode-ribbon-dropdown-hoverBackground);
++}
++
++.ribbon-panel-body {
++	display: flex;
++	flex-direction: column;
++	gap: 8px;
++	padding: 8px;
++}
++
++.ribbon-panel-section {
++	display: flex;
++	flex-direction: column;
++	gap: 4px;
++}
++
++.ribbon-panel-section + .ribbon-panel-section {
++	padding-top: 6px;
++	border-top: 1px solid var(--vscode-ribbon-dropdown-separator);
++}
++
++.ribbon-panel-section-title {
++	font-size: 10px;
++	line-height: 14px;
++	text-transform: uppercase;
++	letter-spacing: 0.05em;
++	color: var(--vscode-ribbon-dropdown-sectionTitle);
++	padding: 0 2px;
++}
++
++.ribbon-panel-grid {
++	display: grid;
++	grid-template-columns: repeat(var(--ribbon-panel-columns, 3), minmax(0, 1fr));
++	gap: 2px;
++}
++
++/*
++ * 单格：由 renderContributionItem 生成的 .ribbon-item 或默认 .ribbon-panel-cell-button
++ * 都会带上 .ribbon-panel-cell。这里把 ribbon-item 在面板语境下强制改写成
++ * "大图标在上、label 在下"的方形格子，与 ribbon 主区域布局解耦。
++ */
++.ribbon-panel-cell,
++.ribbon-panel-cell-button {
++	display: flex;
++	flex-direction: column;
++	align-items: center;
++	justify-content: flex-start;
++	gap: 4px;
++	min-height: 64px;
++	padding: 6px 4px;
++	border: 1px solid transparent;
++	border-radius: 4px;
++	background: transparent;
++	color: inherit;
++	font: inherit;
++	cursor: pointer;
++	text-align: center;
++}
++
++.ribbon-panel-cell:hover,
++.ribbon-panel-cell-button:hover:not(:disabled) {
++	background: var(--vscode-ribbon-dropdown-hoverBackground);
++	border-color: var(--vscode-ribbon-dropdown-border);
++}
++
++.ribbon-panel-cell:focus-visible,
++.ribbon-panel-cell-button:focus-visible {
++	outline: 1px solid var(--vscode-focusBorder);
++	outline-offset: -1px;
++}
++
++.ribbon-panel-cell:disabled,
++.ribbon-panel-cell-button:disabled {
++	opacity: 0.5;
++	cursor: default;
++}
++
++/*
++ * renderContributionItem 在 .ribbon-panel-cell 语境里可能生成多种内部结构
++ * （button / splitButton / dropdown-single）。统一让内部图标变大、label 变
++ * 小并居中，把横向的 ribbon-item-horizontal / 竖排的 .ribbon-menu-items
++ * 规则压制掉。
++ */
++.ribbon-panel-cell .ribbon-item-icon {
++	width: 28px;
++	height: 28px;
++	min-height: 28px;
++	font-size: 28px;
++	line-height: 1;
++	flex: 0 0 auto;
++}
++
++.ribbon-panel-cell .ribbon-item-label,
++.ribbon-panel-cell-button .ribbon-panel-cell-label {
++	font-size: 11px;
++	line-height: 1.25;
++	color: var(--vscode-ribbon-dropdown-foreground);
++	word-break: break-word;
++}
++
++.ribbon-panel-cell .ribbon-dropdown-footer,
++.ribbon-panel-cell .ribbon-dropdown-trigger {
++	flex-direction: column;
++	align-items: center;
++	gap: 2px;
++}
++
++.ribbon-panel-cell .ribbon-dropdown-footer .codicon,
++.ribbon-panel-cell .ribbon-dropdown-trigger .codicon {
++	font-size: 10px;
++}
++
++.ribbon-panel-dropdown .ribbon-custom-content {
++	display: block;
++	max-width: 100%;
++	border: 0;
++	background: transparent;
++}
++
++/*
++ * ============================================================================
++ * 折叠分组下拉（ribbon-group folded 后点击 .ribbon-group-dropdown 弹出）
++ * ----------------------------------------------------------------------------
++ * 复用 .ribbon-panel-dropdown 的外壳（--vscode-ribbon-dropdown-* 色板、圆
++ * 角、阴影），内部不再走 .ribbon-panel-grid 网格，而是直接放原始的
++ * .ribbon-items 节点 —— 也就是该分组未折叠时在 ribbon 主区域里的样貌（横向
++ * 6 行网格、full/half/third 三种尺寸、splitButton 双层结构）。
++ *
++ * 关键点：
++ * - .ribbon-items 的 height 依赖 --ribbon-item-full-height，弹层容器不在
++ *   .ribbon-group 子树里继承不到，由 ribbonPart.ts 在 render 时显式设置该
++ *   变量为 74px；这里再用 fallback 兜底。
++ * - 不覆写 .ribbon-item / .ribbon-dropdown-item 的尺寸规则，让原 ribbon 区
++ *   域的 CSS 照常生效（复用 DOM 的核心收益：视觉与交互完全一致）。
++ * - <template class="ribbon-items-placeholder"> 是占位节点，本身不可见也不
++ *   占空间，仅用于关闭时把 .ribbon-items 还回原分组 DOM 原位。
++ * ============================================================================
++ */
++.ribbon-folded-dropdown {
++	padding: 6px;
++}
++
++/*
++ * .ribbon-items 的 height: var(--ribbon-item-full-height) 原本由 .ribbon-group
++ * 提供该变量；弹层容器不在 .ribbon-group 子树里，ribbonPart.ts 在 render 时
++ * 会显式设置 --ribbon-item-full-height: 74px，这里再用 fallback 兜底。其余
++ * 网格规则（display:grid、grid-template-rows、grid-auto-flow）由 .ribbon-items
++ * 原规则提供，复用 DOM 时照常生效。
++ */
++.ribbon-folded-dropdown > .ribbon-items {
++	height: var(--ribbon-item-full-height, 74px);
++}
++
++template.ribbon-items-placeholder {
++	display: none;
++}
+
 diff --git a/src/vs/workbench/browser/parts/ribbon/ribbonExtensionPoint.ts b/src/vs/workbench/browser/parts/ribbon/ribbonExtensionPoint.ts
 new file mode 100644
 index 0000000000000000000000000000000000000000..4bfd0e2efdcee3c23d28bf2ef620ecf87766d6d5
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/ribbonExtensionPoint.ts
-@@ -0,0 +1,315 @@
+@@ -0,0 +1,334 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -731,6 +978,14 @@ index 0000000000000000000000000000000000000000..4bfd0e2efdcee3c23d28bf2ef620ecf8
 +export type RibbonItemSize = 'full' | 'half' | 'third';
 +export type RibbonItemStyle = 'icon' | 'iconAndLabel';
 +export type RibbonItemType = 'button' | 'splitButton' | 'dropdown';
++/*
++ * 下拉浮层布局：
++ * - `menu`（默认）：竖排命令列表，复用 `--vscode-menu-*` 色板，适合纯命令。
++ * - `panel`：Word 风格的紧凑面板，带可选标题、网格化大图标按钮、可选自定义
++ *   内容区，使用 `--vscode-ribbon-dropdown-*` 专用色板。扩展声明 `layout:
++ *   'panel'` 即可让分组/单体/分割下拉弹出面板而非菜单。
++ */
++export type RibbonMenuLayout = 'menu' | 'panel';
 +
 +export interface IRibbonResponsiveLayoutContribution {
 +	readonly size: RibbonItemSize;
@@ -753,6 +1008,14 @@ index 0000000000000000000000000000000000000000..4bfd0e2efdcee3c23d28bf2ef620ecf8
 +export interface IRibbonMenuContribution {
 +	readonly items?: readonly IRibbonItemContribution[];
 +	readonly custom?: IRibbonCustomContentContribution;
++	/*
++	 * 浮层布局。默认 `menu`（竖排命令列表）；设为 `panel` 时弹出 Word 风格的
++	 * 紧凑面板。`panel` 模式下额外读取 `title` / `columns` 作为面板标题与网
++	 * 格列数提示。
++	 */
++	readonly layout?: RibbonMenuLayout;
++	readonly title?: string;
++	readonly columns?: number;
 +}
 +
 +export interface IRibbonItemContribution {
@@ -913,6 +1176,9 @@ index 0000000000000000000000000000000000000000..4bfd0e2efdcee3c23d28bf2ef620ecf8
 +			properties: {
 +				items: { type: 'array', minItems: 1, items: { $ref: '#/definitions/ribbonItem' } },
 +				custom: ribbonCustomContentSchema,
++				layout: { type: 'string', enum: ['menu', 'panel'], default: 'menu', description: localize('ribbon.menuLayout', "Popup style: a vertical command menu, or a Word-like panel with grouped large-icon buttons.") },
++				title: { type: 'string', description: localize('ribbon.menuTitle', "Optional panel header shown when layout is 'panel'.") },
++				columns: { type: 'number', minimum: 1, maximum: 8, default: 3, description: localize('ribbon.menuColumns', "Suggested column count for panel layout.") },
 +			},
 +		},
 +	},
@@ -1031,7 +1297,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6a94c7687
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/ribbonPart.ts
-@@ -0,0 +1,915 @@
+@@ -0,0 +1,1247 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -1061,7 +1327,7 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +import { Part } from '../../part.js';
 +import { IWorkbenchLayoutService, Parts } from '../../../services/layout/browser/layoutService.js';
 +import { IRegisteredRibbonTab, IRibbonCustomContentContribution, IRibbonGroupContribution, IRibbonItemContribution, IRibbonMenuContribution, IRibbonResponsiveLayoutContribution, IRibbonResponsiveMenuContribution, RibbonBuiltinTabId, RibbonItemSize, RibbonItemStyle, ribbonRegistry } from './ribbonExtensionPoint.js';
-+import { IRibbonService } from './ribbonService.js';
++import { IRibbonPanelDescriptor, IRibbonPanelHandle, IRibbonPanelItem, IRibbonService } from './ribbonService.js';
 +
 +const EXPANDED_HEIGHT = 130;
 +const COLLAPSED_HEIGHT = 32;
@@ -1257,6 +1523,27 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +	private hasPersistedActiveTab: boolean;
 +	private collapsed: boolean;
 +	private overlay: IOpenContextView | undefined;
++	/*
++	 * 当前已打开的下拉状态。所有下拉（折叠分组下拉 showFoldedGroupDropdown、
++	 * 扩展菜单 showContributionMenu、Word 风格面板 showPanelDropdown）都走
++	 * IContextViewService 同一单例，用 anchor 引用 + menuId 做 toggle 判定。
++	 * selectTab/render/renderActiveContent/refreshActiveContent/showOverlay
++	 * 重建 DOM 前会调 closeOpenMenu（→ hideContextView）并清空此状态，避免
++	 * "旧的收了、新的没弹"；折叠分组下拉的 onHide 还负责把借出的 .ribbon-items
++	 * 节点还回原分组。
++	 */
++	private openMenuAnchor: HTMLElement | undefined;
++	private openMenuId: string | undefined;
++	/*
++	 * 当前打开的 ContextView 下拉种类标记。当前只有 'contextView'：
++	 * 折叠分组下拉 / 扩展菜单 / Word 风格面板下拉都走 IContextViewService
++	 * 单例，由 hideContextView() 一并收起。内置 SubmenuAction 子菜单走的是
++	 * IContextMenuService（renderActionGroup 中），由它自己的
++	 * onDidHideContextMenu 生命周期管理，不纳入统一 toggle 跟踪——用户点击
++	 * 其它下拉或 selectTab 触发 closeOpenMenu 时，SubmenuAction 子菜单会跟
++	 * 随 ContextView 单例的隐藏被 IContextMenuService 内部联动收起。
++	 */
++	private openMenuKind: 'contextView' | undefined;
 +
 +	constructor(
 +		@IThemeService themeService: IThemeService,
@@ -1358,6 +1645,7 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +		}
 +
 +		const focusedTabId = this.getFocusedTabId();
++		this.closeOpenMenu();
 +		this.tabDisposables.clear();
 +		this.contentDisposables.clear();
 +		this.overlay?.close();
@@ -1409,6 +1697,7 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +	}
 +
 +	private renderActiveContent(tab: RibbonTab | undefined): void {
++		this.closeOpenMenu();
 +		this.contentDisposables.clear();
 +		if (tab && !this.collapsed) {
 +			this.renderTabContent(tab, this.content, false);
@@ -1423,6 +1712,7 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +		}
 +		const active = this.ensureActiveTab(this.visibleTabs());
 +		if (this.collapsed) {
++			this.closeOpenMenu();
 +			if (active && this.overlay) {
 +				this.showOverlay(active);
 +			}
@@ -1452,6 +1742,7 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +
 +	private showOverlay(tab: RibbonTab): void {
 +		this.overlay?.close();
++		this.closeOpenMenu();
 +		let firstFocusableButton: HTMLButtonElement | undefined;
 +		const open = this.contextViewService.showContextView({
 +			getAnchor: () => this.root,
@@ -1615,28 +1906,41 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +		return firstFocusableButton;
 +	}
 +
-+	private renderContributionGroupDropdown(parent: HTMLElement, tab: IRegisteredRibbonTab, contribution: IRibbonGroupContribution, store: DisposableStore): void {
-+		const button = append(parent, $<HTMLButtonElement>('button.ribbon-group-dropdown'));
++	private renderContributionGroupDropdown(group: HTMLElement, tab: IRegisteredRibbonTab, contribution: IRibbonGroupContribution, store: DisposableStore): void {
++		const button = append(group, $<HTMLButtonElement>('button.ribbon-group-dropdown'));
 +		button.type = 'button';
 +		button.setAttribute('aria-label', localize('ribbon.openGroup', "Open {0} menu", contribution.title));
++		button.dataset.menuId = `group:${contribution.id}`;
 +		const representativeItem = contribution.items.find(item => this.matches(item.when)) ?? contribution.items[0];
 +		this.renderContributionIcon(append(button, $('.ribbon-group-dropdown-icon')), tab, representativeItem);
 +		append(button, $('span.ribbon-group-dropdown-label')).textContent = contribution.title;
 +		append(button, $('.ribbon-group-dropdown-chevron.codicon.codicon-chevron-down'));
 +		store.add(addDisposableListener(button, EventType.CLICK, () => {
-+			this.showContributionMenu(button, tab, { items: contribution.items });
++			/*
++			 * 折叠分组下拉直接复用该分组在 ribbon 主区域里已经渲染好的
++			 * .ribbon-items 节点（folded 时仅 display:none，DOM 完整保留），
++			 * 把它借到弹层里展示，关闭时还回原位。这样按钮形态、事件、命
++			 * 令执行、when/enablement、responsive 缩放状态都完全一致，弹出
++			 * 的就是"该分组未折叠时的原样内容"。
++			 */
++			this.showFoldedGroupDropdown(button, group, contribution.title);
 +		}));
 +	}
 +
-+	private renderGroupDropdown(parent: HTMLElement, tab: IBuiltinRibbonTab, title: string, actions: readonly IAction[], store: DisposableStore): void {
-+		const button = append(parent, $<HTMLButtonElement>('button.ribbon-group-dropdown'));
++	private renderGroupDropdown(group: HTMLElement, tab: IBuiltinRibbonTab, title: string, actions: readonly IAction[], store: DisposableStore): void {
++		const button = append(group, $<HTMLButtonElement>('button.ribbon-group-dropdown'));
 +		button.type = 'button';
 +		button.setAttribute('aria-label', localize('ribbon.openGroup', "Open {0} menu", title));
 +		this.renderBuiltinActionIcon(append(button, $('.ribbon-group-dropdown-icon')), tab, actions[0]);
 +		append(button, $('span.ribbon-group-dropdown-label')).textContent = title;
 +		append(button, $('.ribbon-group-dropdown-chevron.codicon.codicon-chevron-down'));
 +		store.add(addDisposableListener(button, EventType.CLICK, () => {
-+			this.contextMenuService.showContextMenu({ getAnchor: () => button, getActions: () => [...actions] });
++			/*
++			 * 内置 tab 折叠下拉与扩展 tab 统一：复用 .ribbon-items 原样 DOM，
++			 * 不再走 IContextMenuService 的原生右键菜单。toggle/切换语义由
++			 * showFoldedGroupDropdown 内部基于 openMenuAnchor 处理。
++			 */
++			this.showFoldedGroupDropdown(button, group, title);
 +		}));
 +	}
 +
@@ -1756,7 +2060,8 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +			primary.disabled = !enabled;
 +			primary.setAttribute('aria-label', localize('ribbon.runCommand', "Run {0}", item.title));
 +			this.renderContributionIcon(append(primary, $('.ribbon-item-icon')), tab, item);
-+			const trigger = this.createDropdownTrigger(split, item.title);
++			const trigger = this.createDropdownTrigger(split, item.title, store);
++			trigger.dataset.menuId = `item:${item.title}`;
 +			store.add(addDisposableListener(primary, EventType.CLICK, () => this.runContributionCommand(item, closeAfterRun)));
 +			store.add(addDisposableListener(trigger, EventType.CLICK, () => openMenu(trigger)));
 +			return enabled ? primary : trigger;
@@ -1766,22 +2071,51 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +		button.type = 'button';
 +		button.setAttribute('aria-label', localize('ribbon.openItemMenu', "Open {0} menu", item.title));
 +		button.setAttribute('aria-haspopup', 'dialog');
++		button.dataset.menuId = `item:${item.title}`;
 +		this.renderContributionIcon(append(button, $('.ribbon-item-icon')), tab, item);
 +		const footer = append(button, $('.ribbon-dropdown-footer'));
 +		append(footer, $('span.ribbon-item-label')).textContent = item.title;
 +		append(footer, $('.codicon.codicon-chevron-down'));
++		this.watchRibbonLabelLines(footer, store);
 +		store.add(addDisposableListener(button, EventType.CLICK, () => openMenu(button)));
 +		return button;
 +	}
 +
-+	private createDropdownTrigger(parent: HTMLElement, title: string): HTMLButtonElement {
++	private createDropdownTrigger(parent: HTMLElement, title: string, store: DisposableStore): HTMLButtonElement {
 +		const trigger = append(parent, $<HTMLButtonElement>('button.ribbon-dropdown-trigger'));
 +		trigger.type = 'button';
 +		trigger.setAttribute('aria-label', localize('ribbon.openItemMenu', "Open {0} menu", title));
 +		trigger.setAttribute('aria-haspopup', 'dialog');
 +		append(trigger, $('span.ribbon-item-label')).textContent = title;
 +		append(trigger, $('.codicon.codicon-chevron-down'));
++		this.watchRibbonLabelLines(trigger, store);
 +		return trigger;
++	}
++
++	/*
++	 * Toggles `ribbon-label-single` / `ribbon-label-double` on a dropdown trigger
++	 * or footer based on whether its label wraps to a second line at the current
++	 * layout. Recomputes on resize via ResizeObserver so the chevron keeps its
++	 * horizontal alignment as the group width changes.
++	 */
++	private watchRibbonLabelLines(container: HTMLElement, store: DisposableStore): void {
++		const label = container.querySelector<HTMLElement>('.ribbon-item-label');
++		if (!label) {
++			return;
++		}
++		const apply = () => {
++			const isDoubleLine = label.offsetHeight > 15;
++			container.classList.toggle('ribbon-label-single', !isDoubleLine);
++			container.classList.toggle('ribbon-label-double', isDoubleLine);
++		};
++		apply();
++		store.add(addDisposableListener(getWindow(container), EventType.RESIZE, apply));
++		const ResizeObserverCtor = getWindow(container).ResizeObserver;
++		if (ResizeObserverCtor) {
++			const observer = new ResizeObserverCtor(apply);
++			observer.observe(label);
++			store.add({ dispose: () => observer.disconnect() });
++		}
 +	}
 +
 +	private isContributionCommandEnabled(commandId: string | undefined): boolean {
@@ -1815,6 +2149,40 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +
 +	private showContributionMenu(anchor: HTMLElement, tab: IRegisteredRibbonTab, menu: IRibbonMenuContribution | undefined): void {
 +		if (!menu) {
++			return;
++		}
++		/*
++		 * 切换语义：如果点击的 anchor 就是当前已打开的扩展菜单的 anchor，先收起再
++		 * 返回（toggle）；否则先把旧 view 关掉再 show，确保切换时新菜单一定会弹
++		 * 出来，避免上游 ContextView 在 anchor 被销毁时静默吞掉新的 show 调用。
++		 */
++		const menuId = `contribution:${tab.id}:${anchor.dataset.menuId ?? ''}`;
++		if (this.openMenuKind === 'contextView' && this.openMenuAnchor === anchor) {
++			this.closeOpenMenu();
++			return;
++		}
++		this.closeOpenMenu();
++		this.openMenuAnchor = anchor;
++		this.openMenuId = menuId;
++		this.openMenuKind = 'contextView';
++		if (menu.layout === 'panel') {
++			/*
++			 * 面板布局：复用 IRibbonService.showPanelDropdown 公共入口，把声明
++			 * 式 items / custom 转成结构化描述符；渲染时通过 renderItem 回调
++			 * 复用 renderContributionItem（继承图标解析、命令执行、when 过滤）。
++			 * panelStore 跟随面板生命周期，面板关闭时一并释放。renderItem 回调
++			 * 的 item 形参在描述符层面泛化为 IRibbonPanelItem，但声明式场景下
++			 * 实际传入的恒为 IRibbonItemContribution，故用 as 断言还原类型。
++			 */
++			const panelStore = new DisposableStore();
++			const descriptor: IRibbonPanelDescriptor = {
++				title: menu.title,
++				columns: menu.columns,
++				sections: menu.items?.length ? [{ items: menu.items.filter(item => this.matches(item.when)) }] : [],
++				custom: menu.custom,
++				renderItem: (parent, item) => this.renderContributionItem(parent, tab, item as IRibbonItemContribution, true, panelStore),
++			};
++			this.showPanelDropdown(anchor, descriptor, panelStore);
 +			return;
 +		}
 +		let firstFocusableElement: HTMLElement | undefined;
@@ -1867,7 +2235,237 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +				return menuStore;
 +			},
 +			focus: () => firstFocusableElement?.focus(),
++			onHide: () => {
++				if (this.openMenuAnchor === anchor) {
++					this.openMenuAnchor = undefined;
++					this.openMenuId = undefined;
++					this.openMenuKind = undefined;
++				}
++			},
 +		});
++	}
++
++	/*
++	 * 主动收起当前打开的下拉菜单（折叠分组下拉 / 扩展面板下拉 / 内置 tab 折叠
++	 * 下拉）。三类都最终走 ContextView 单例，hideContextView() 会把它们一并收
++	 * 起。状态字段一并清空，方便下次 show 时的 toggle 判定从干净状态出发。
++	 *
++	 * 注意：这里只覆盖 ContextView 单例下拉。内置 SubmenuAction 子菜单
++	 * （renderActionGroup 中走 IContextMenuService.showContextMenu）有自己的
++	 * 生命周期，由 IContextMenuService 在 ContextView 隐藏时联动收起，因此不
++	 * 纳入 openMenuKind 跟踪——历史上曾有 'contextMenu' 分支，但在改用
++	 * IContextViewService 后变成死代码，已删除以避免注释与实现不一致。
++	 */
++	private closeOpenMenu(): void {
++		if (this.openMenuKind === 'contextView') {
++			this.contextViewService.hideContextView();
++		}
++		this.openMenuAnchor = undefined;
++		this.openMenuId = undefined;
++		this.openMenuKind = undefined;
++	}
++
++	/*
++	 * 折叠分组下拉：把分组在 ribbon 主区域里已经渲染好的 .ribbon-items 节点
++	 * "借"到 ContextView 弹层里展示，关闭时原样还回。
++	 *
++	 * 设计动机：折叠（.ribbon-group.folded）只是给 .ribbon-items 加
++	 * display:none，DOM 与所有按钮事件、命令绑定、when/enablement、responsive
++	 * 缩放状态（dataset.responsiveIndex / hidden）都完整保留。直接复用原节点
++	 * 比"按 contribution.items 重新渲染一份"更一致——用户看到的就是该分组未
++	 * 折叠时的原样内容（横向 6 行网格、full/half/third 三种尺寸、splitButton
++	 * 双层结构），无需任何额外声明。
++	 *
++	 * DOM 借还：在原 .ribbon-items 位置插入一个 <template> 占位（不可见、不参
++	 * 与布局），弹层关闭时通过 insertBefore 把 .ribbon-items 还回占位之前。
++	 * 即使 ribbon 在弹层打开期间被展开（setCollapsed(false) → render() 重建
++	 * content），onHide 也会先被触发（render 开头调 closeOpenMenu）把节点还回
++	 * 原分组、随后该分组 DOM 被 clearNode 销毁——这是正确行为，重建会生成新
++	 * 的 .ribbon-items。
++	 *
++	 * 外壳复用 .ribbon-panel-dropdown 的 --vscode-ribbon-dropdown-* 色板（PR
++	 * 已有的 Word 风格浮层外观），叠加 .ribbon-folded-dropdown 标记内部按原
++	 * ribbon 网格规则排版。容器显式设 --ribbon-item-full-height:74px，因为弹
++	 * 层不在 .ribbon-group 子树里、不会继承该变量，不设会导致网格高度塌缩。
++	 */
++	private showFoldedGroupDropdown(anchor: HTMLButtonElement, group: HTMLElement, title: string): void {
++		/*
++		 * toggle：点击的就是当前已打开下拉的 anchor → 收起返回。沿用
++		 * showContributionMenu 的判定模式（openMenuKind + openMenuAnchor）。
++		 */
++		if (this.openMenuKind === 'contextView' && this.openMenuAnchor === anchor) {
++			this.closeOpenMenu();
++			return;
++		}
++		const items = group.querySelector<HTMLElement>(':scope > .ribbon-items');
++		if (!items) {
++			return;
++		}
++		this.closeOpenMenu();
++		this.openMenuAnchor = anchor;
++		this.openMenuId = `folded:${title}`;
++		this.openMenuKind = 'contextView';
++		/*
++		 * 占位节点：用 <template> 而非 <div>，避免被 .ribbon-group 的子选择器
++		 * （如 :scope > .ribbon-items）误命中，也不参与 flex/grid 布局。记录
++		 * 在 items 节点上，onHide 时反向取回。
++		 */
++		const placeholder = group.ownerDocument.createElement('template');
++		placeholder.className = 'ribbon-items-placeholder';
++		group.insertBefore(placeholder, items);
++		let firstFocusableElement: HTMLElement | undefined;
++		this.contextViewService.showContextView({
++			getAnchor: () => anchor,
++			render: container => {
++				container.classList.add('ribbon-panel-dropdown', 'ribbon-folded-dropdown');
++				container.style.setProperty('--ribbon-item-full-height', '74px');
++				container.dataset.foldedGroup = title;
++				clearNode(container);
++				container.appendChild(items);
++				firstFocusableElement = items.querySelector<HTMLElement>('button:not([disabled])') ?? undefined;
++				return { dispose: () => { /* 节点生命周期由 group 管理，不在此销毁 */ } };
++			},
++			focus: () => firstFocusableElement?.focus(),
++			onHide: () => {
++				/*
++				 * 还节点：只有 placeholder 仍在 group 里时才还（如果 group 已
++				 * 被 clearNode 销毁、placeholder.parentNode 为 null，节点就让
++				 * ContextView 容器随销毁一并清理）。
++				 */
++				if (placeholder.parentNode) {
++					placeholder.parentNode.insertBefore(items, placeholder);
++					placeholder.remove();
++				}
++				if (this.openMenuAnchor === anchor) {
++					this.openMenuAnchor = undefined;
++					this.openMenuId = undefined;
++					this.openMenuKind = undefined;
++				}
++			},
++		});
++	}
++
++	/*
++	 * Word 风格面板下拉的统一实现。声明式 contributes.ribbon（layout:'panel'）
++	 * 和运行时 IRibbonService.showPanelDropdown 都走这里。
++	 *
++	 * 结构：
++	 *   .ribbon-panel-dropdown            ← 外壳（边框/阴影/色板）
++	 *   ├── .ribbon-panel-header?          ← 可选标题栏（含关闭按钮）
++	 *   ├── .ribbon-panel-body            ← 主体（sections + custom）
++	 *   │   ├── .ribbon-panel-section?     ← 每个 section
++	 *   │   │   ├── .ribbon-panel-section-title?
++	 *   │   │   └── .ribbon-panel-grid     ← 网格容器（columns 控制列数）
++	 *   │   │       └── .ribbon-panel-cell ← 单格（大图标 + label）
++	 *   │   └── iframe.ribbon-custom-content?
++	 *   └── .ribbon-panel-footer?          ← 预留（当前未渲染）
++	 *
++	 * 与竖排菜单的区别：使用 --vscode-ribbon-dropdown-* 专用色板，不依赖
++	 * --vscode-menu-*，避免观感被误认为"菜单栏"。
++	 */
++	showPanelDropdown(anchor: HTMLElement, descriptor: IRibbonPanelDescriptor, externalStore?: DisposableStore): IRibbonPanelHandle {
++		this.closeOpenMenu();
++		this.openMenuAnchor = anchor;
++		this.openMenuId = `panel:${descriptor.title ?? ''}`;
++		this.openMenuKind = 'contextView';
++		const panelStore = externalStore ?? new DisposableStore();
++		const columns = Math.min(8, Math.max(1, descriptor.columns ?? 3));
++		let firstFocusableElement: HTMLElement | undefined;
++		this.contextViewService.showContextView({
++			getAnchor: () => anchor,
++			render: container => {
++				container.classList.add('ribbon-panel-dropdown');
++				container.style.setProperty('--ribbon-panel-columns', String(columns));
++				clearNode(container);
++
++				if (descriptor.title) {
++					const header = append(container, $('.ribbon-panel-header'));
++					append(header, $('span.ribbon-panel-title')).textContent = descriptor.title;
++					const closeButton = append(header, $<HTMLButtonElement>('button.ribbon-panel-close.codicon.codicon-close'));
++					closeButton.type = 'button';
++					closeButton.setAttribute('aria-label', localize('ribbon.panelClose', "Close Ribbon panel"));
++					panelStore.add(addDisposableListener(closeButton, EventType.CLICK, () => this.closeOpenMenu()));
++					firstFocusableElement = closeButton;
++				}
++
++				const body = append(container, $('.ribbon-panel-body'));
++				const sections = descriptor.sections ?? [];
++				for (const section of sections) {
++					const sectionEl = append(body, $('.ribbon-panel-section'));
++					if (section.title) {
++						append(sectionEl, $('.ribbon-panel-section-title')).textContent = section.title;
++					}
++					if (section.items.length === 0) {
++						continue;
++					}
++					const grid = append(sectionEl, $('.ribbon-panel-grid'));
++					for (const item of section.items) {
++						let cell: HTMLElement;
++						if (descriptor.renderItem) {
++							cell = descriptor.renderItem(grid, item);
++						} else {
++							cell = this.renderDefaultPanelCell(grid, item, panelStore);
++						}
++						cell.classList.add('ribbon-panel-cell');
++						if (!cell.hasAttribute('tabindex')) {
++							cell.setAttribute('tabindex', '0');
++						}
++						firstFocusableElement ??= cell as HTMLElement;
++					}
++				}
++
++				if (descriptor.custom) {
++					firstFocusableElement ??= this.renderCustomMenuContent(body, descriptor.custom);
++				}
++				return panelStore;
++			},
++			focus: () => firstFocusableElement?.focus(),
++			onHide: () => {
++				if (this.openMenuAnchor === anchor) {
++					this.openMenuAnchor = undefined;
++					this.openMenuId = undefined;
++					this.openMenuKind = undefined;
++				}
++			},
++		});
++		// ContextView 单例：handle.close 通过 closeOpenMenu 复用 hideContextView。
++		return {
++			close: () => {
++				if (this.openMenuAnchor === anchor) {
++					this.closeOpenMenu();
++				}
++			},
++		};
++	}
++
++	/*
++	 * 默认面板格子渲染：用于扩展运行时调用 showPanelDropdown 但未提供
++	 * renderItem 时。生成"大图标 + label"的 button，点击执行 command。声明
++	 * 式 contributes.ribbon 走 showContributionMenu → renderItem 回调，不会
++	 * 走到这里。
++	 */
++	private renderDefaultPanelCell(parent: HTMLElement, item: IRibbonPanelItem, panelStore: DisposableStore): HTMLButtonElement {
++		const button = append(parent, $<HTMLButtonElement>('button.ribbon-panel-cell-button'));
++		button.type = 'button';
++		button.setAttribute('aria-label', item.title);
++		const icon = append(button, $('.ribbon-panel-cell-icon'));
++		if (item.icon) {
++			const value = typeof item.icon === 'string' ? item.icon : item.icon.dark;
++			const themeIcon = ThemeIcon.fromString(value);
++			if (themeIcon) {
++				icon.classList.add(...ThemeIcon.asClassNameArray(themeIcon));
++			}
++		}
++		append(button, $('span.ribbon-panel-cell-label')).textContent = item.title;
++		button.disabled = !item.command;
++		if (item.command) {
++			panelStore.add(addDisposableListener(button, EventType.CLICK, () => {
++				void this.commandService.executeCommand(item.command!, ...(item.arguments ?? []))
++					.catch(error => this.notificationService.error(error));
++				this.closeOpenMenu();
++			}));
++		}
++		return button;
 +	}
 +
 +	private renderCustomMenuContent(parent: HTMLElement, content: IRibbonCustomContentContribution): HTMLIFrameElement {
@@ -1947,24 +2545,77 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +}
 +
 +registerSingleton(IRibbonService, RibbonPart, InstantiationType.Eager);
+
 diff --git a/src/vs/workbench/browser/parts/ribbon/ribbonService.ts b/src/vs/workbench/browser/parts/ribbon/ribbonService.ts
 new file mode 100644
 index 0000000000000000000000000000000000000000..4cc6d313846c96a3fb1f6a6b238da4c4ecda7a35
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/ribbonService.ts
-@@ -0,0 +1,13 @@
+@@ -0,0 +1,65 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
 + *--------------------------------------------------------------------------------------------*/
 +
 +import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
++import { IRibbonCustomContentContribution } from './ribbonExtensionPoint.js';
 +
 +export const IRibbonService = createDecorator<IRibbonService>('ribbonService');
++
++/*
++ * 面板下拉的通用描述符。扩展无需自建 HTML 即可获得 Word 风格的紧凑面板外
++ * 壳（边框、阴影、标题、网格化大图标按钮、可分组），由 RibbonPart 统一渲染。
++ *
++ * 两种填充方式：
++ * 1. `sections`：结构化命令网格。每个 section 可有自己的小标题，section 内
++ *    的 items 按 `columns` 排成网格，每格一个"大图标 + label"按钮。
++ *    - 若提供了 `renderItem` 回调，RibbonPart 用它渲染每个 item（典型用法
++ *      是从声明式 `contributes.ribbon` 转发，复用 renderContributionItem）。
++ *    - 否则 RibbonPart 用默认渲染：把每个 item 当作 `{ title, icon }` 显示。
++ * 2. `custom`：隔离 sandbox iframe 中的静态 HTML/CSS（与 menu.custom 一致）。
++ *
++ * `sections` 与 `custom` 可同时存在（custom 排在 sections 之后）。
++ */
++export interface IRibbonPanelItem {
++	readonly title: string;
++	readonly icon?: string | { readonly light: string; readonly dark: string };
++	readonly command?: string;
++	readonly arguments?: readonly unknown[];
++	readonly when?: string;
++	[key: string]: unknown;
++}
++
++export interface IRibbonPanelSection {
++	readonly title?: string;
++	readonly items: readonly IRibbonPanelItem[];
++}
++
++export interface IRibbonPanelDescriptor {
++	readonly title?: string;
++	readonly columns?: number;
++	readonly sections?: readonly IRibbonPanelSection[];
++	readonly custom?: IRibbonCustomContentContribution;
++	readonly renderItem?: (parent: HTMLElement, item: IRibbonPanelItem) => HTMLElement;
++}
++
++export interface IRibbonPanelHandle {
++	/*
++	 * 主动关闭面板。扩展可在执行完命令或用户操作后调用；不调用时由 RibbonPart
++	 * 在点击外部、切 tab、切换菜单时自动关闭。
++	 */
++	close(): void;
++}
 +
 +export interface IRibbonService {
 +	readonly _serviceBrand: undefined;
 +	focus(): void;
++	/*
++	 * 在指定 anchor 旁弹出一个 Word 风格的面板下拉。返回一个 handle 用于主动
++	 * 关闭。同一时刻只会有一个面板/菜单打开；若之前已有打开，调用此方法会先
++	 * 关闭旧的再打开新的（不会触发 toggle——若点击的就是当前 anchor，请由调
++	 * 用方自行判断后调用 handle.close()）。
++	 */
++	showPanelDropdown(anchor: HTMLElement, descriptor: IRibbonPanelDescriptor): IRibbonPanelHandle;
 +}
 diff --git a/src/vs/workbench/browser/workbench.ts b/src/vs/workbench/browser/workbench.ts
 index 10e2c3edace79197d928d4586b369ff4f09e414a..229cfd740e1b2f20120531fd5bd94f41074a5d00 100644
@@ -2007,7 +2658,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..ba5231949bd7f45e5c45a5963d828ef7ee68d137
 --- /dev/null
 +++ b/src/vs/workbench/test/browser/parts/ribbon/ribbonPart.test.ts
-@@ -0,0 +1,531 @@
+@@ -0,0 +1,587 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -2459,6 +3110,62 @@ index 0000000000000000000000000000000000000000..ba5231949bd7f45e5c45a5963d828ef7
 +		assert.strictEqual(right.hidden, true);
 +	});
 +
++	test('folded group dropdown reuses the original ribbon-items DOM', () => {
++		/*
++		 * 折叠分组下拉应直接复用该分组在 ribbon 主区域里已经渲染好的
++		 * .ribbon-items 节点（横向 6 行网格、full/half/third 三种尺寸），而不是
++		 * 走竖排菜单或原生右键菜单。这里用一个能 capture delegate 的
++		 * IContextViewService stub 模拟弹层容器（overlayElement），断言：
++		 * 1) 点击折叠下拉后 .ribbon-items 被挪到弹层容器里；
++		 * 2) 原分组位置留下 <template class="ribbon-items-placeholder"> 占位；
++		 * 3) 关闭后 .ribbon-items 还回原分组、占位移除。
++		 */
++		const actions = [
++			disposables.add(new Action('test.first', 'First')),
++			disposables.add(new Action('test.second', 'Second')),
++		];
++		let delegate: IContextViewDelegate | undefined;
++		let renderDisposable: IDisposable | undefined;
++		const overlayElement = mainWindow.document.createElement('div');
++		fixture.append(overlayElement);
++		const contextViewService = {
++			showContextView: (newDelegate: IContextViewDelegate) => {
++				delegate = newDelegate;
++				renderDisposable = newDelegate.render(overlayElement);
++				newDelegate.focus?.();
++				return { close: () => renderDisposable?.dispose() };
++			},
++			hideContextView: () => {
++				renderDisposable?.dispose();
++				delegate?.onHide?.();
++				delegate = undefined;
++			},
++		} as unknown as IContextViewService;
++		createPart(undefined, undefined, actions, contextViewService);
++
++		const viewport = fixture.querySelector<HTMLElement>('.ribbon-scroll-viewport')!;
++		const groups = fixture.querySelector<HTMLElement>('.ribbon-groups')!;
++		Object.defineProperty(viewport, 'clientWidth', { configurable: true, value: 160 });
++		Object.defineProperty(groups, 'scrollWidth', { configurable: true, get: () => 300 - groups.querySelectorAll('.ribbon-group.folded').length * 50 });
++		mainWindow.dispatchEvent(new mainWindow.Event('resize'));
++		assert.strictEqual(groups.querySelectorAll('.ribbon-group.folded').length, 1);
++
++		const group = groups.querySelector<HTMLElement>('.ribbon-group.folded')!;
++		const items = group.querySelector<HTMLElement>(':scope > .ribbon-items')!;
++		const originalItemCount = items.querySelectorAll('.ribbon-item').length;
++		const dropdownButton = group.querySelector<HTMLButtonElement>('.ribbon-group-dropdown')!;
++
++		dropdownButton.click();
++		assert.strictEqual(overlayElement.querySelector('.ribbon-folded-dropdown') instanceof mainWindow.HTMLElement, true, 'folded dropdown container should be rendered');
++		assert.strictEqual(overlayElement.contains(items), true, '.ribbon-items should be borrowed into the dropdown container');
++		assert.strictEqual(group.querySelector('template.ribbon-items-placeholder') instanceof mainWindow.HTMLTemplateElement, true, 'placeholder should remain in original group while dropdown is open');
++		assert.strictEqual(overlayElement.querySelectorAll('.ribbon-item').length, originalItemCount, 'borrowed items should keep the same button count');
++
++		(contextViewService as unknown as { hideContextView: () => void }).hideContextView();
++		assert.strictEqual(group.contains(items), true, '.ribbon-items should be returned to the original group after close');
++		assert.strictEqual(group.querySelector('template.ribbon-items-placeholder'), null, 'placeholder should be removed after close');
++	});
++
 +	test('closes every built-in collapsed overlay on activity bar mousedown before its click handler runs', () => {
 +		let delegate: IContextViewDelegate | undefined;
 +		let renderDisposable: IDisposable | undefined;
@@ -2539,6 +3246,7 @@ index 0000000000000000000000000000000000000000..ba5231949bd7f45e5c45a5963d828ef7
 +
 +	ensureNoDisposablesAreLeakedInTestSuite();
 +});
+
 diff --git a/src/vs/workbench/workbench.common.main.ts b/src/vs/workbench/workbench.common.main.ts
 index 532c20d1cf1db34b86c19eca277ac8782732dee6..372f93d7534714cec340b6d8c9d2931617851be4 100644
 --- a/src/vs/workbench/workbench.common.main.ts
