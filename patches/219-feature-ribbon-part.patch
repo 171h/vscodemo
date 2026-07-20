@@ -259,7 +259,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..595d553faa13b35b251903437d26c19a5b2dc84b
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/media/ribbonpart.css
-@@ -0,0 +1,653 @@
+@@ -0,0 +1,691 @@
 +.monaco-workbench .part.ribbon {
 +	background: var(--vscode-editor-background);
 +	color: var(--vscode-foreground);
@@ -913,6 +913,45 @@ index 0000000000000000000000000000000000000000..595d553faa13b35b251903437d26c19a
 +	border: 0;
 +	background: transparent;
 +}
++
++/*
++ * ============================================================================
++ * 折叠分组下拉（ribbon-group folded 后点击 .ribbon-group-dropdown 弹出）
++ * ----------------------------------------------------------------------------
++ * 复用 .ribbon-panel-dropdown 的外壳（--vscode-ribbon-dropdown-* 色板、圆
++ * 角、阴影），内部不再走 .ribbon-panel-grid 网格，而是直接放原始的
++ * .ribbon-items 节点 —— 也就是该分组未折叠时在 ribbon 主区域里的样貌（横向
++ * 6 行网格、full/half/third 三种尺寸、splitButton 双层结构）。
++ *
++ * 关键点：
++ * - .ribbon-items 的 height 依赖 --ribbon-item-full-height，弹层容器不在
++ *   .ribbon-group 子树里继承不到，由 ribbonPart.ts 在 render 时显式设置该
++ *   变量为 74px；这里再用 fallback 兜底。
++ * - 不覆写 .ribbon-item / .ribbon-dropdown-item 的尺寸规则，让原 ribbon 区
++ *   域的 CSS 照常生效（复用 DOM 的核心收益：视觉与交互完全一致）。
++ * - <template class="ribbon-items-placeholder"> 是占位节点，本身不可见也不
++ *   占空间，仅用于关闭时把 .ribbon-items 还回原分组 DOM 原位。
++ * ============================================================================
++ */
++.ribbon-folded-dropdown {
++	padding: 6px;
++}
++
++/*
++ * .ribbon-items 的 height: var(--ribbon-item-full-height) 原本由 .ribbon-group
++ * 提供该变量；弹层容器不在 .ribbon-group 子树里，ribbonPart.ts 在 render 时
++ * 会显式设置 --ribbon-item-full-height: 74px，这里再用 fallback 兜底。其余
++ * 网格规则（display:grid、grid-template-rows、grid-auto-flow）由 .ribbon-items
++ * 原规则提供，复用 DOM 时照常生效。
++ */
++.ribbon-folded-dropdown > .ribbon-items {
++	height: var(--ribbon-item-full-height, 74px);
++}
++
++template.ribbon-items-placeholder {
++	display: none;
++}
+
 diff --git a/src/vs/workbench/browser/parts/ribbon/ribbonExtensionPoint.ts b/src/vs/workbench/browser/parts/ribbon/ribbonExtensionPoint.ts
 new file mode 100644
 index 0000000000000000000000000000000000000000..4bfd0e2efdcee3c23d28bf2ef620ecf87766d6d5
@@ -1258,7 +1297,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6a94c7687
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/ribbonPart.ts
-@@ -0,0 +1,1161 @@
+@@ -0,0 +1,1232 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -1485,11 +1524,13 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +	private collapsed: boolean;
 +	private overlay: IOpenContextView | undefined;
 +	/*
-+	 * 当前已打开的"分组折叠下拉 / 扩展面板下拉"状态。扩展 tab 走
-+	 * IContextViewService（同一时刻仅一个 view），用 anchor 引用 + menuId 来
-+	 * 实现 toggle；内置 tab 走 IContextMenuService（同样基于 ContextView 单
-+	 * 例），只用 anchor 引用做 toggle 判定。selectTab/render 重建 DOM 前会
-+	 * 调 hideContextView 并清空此状态，避免"旧的收了、新的没弹"。
++	 * 当前已打开的下拉状态。所有下拉（折叠分组下拉 showFoldedGroupDropdown、
++	 * 扩展菜单 showContributionMenu、Word 风格面板 showPanelDropdown）都走
++	 * IContextViewService 同一单例，用 anchor 引用 + menuId 做 toggle 判定。
++	 * selectTab/render/renderActiveContent/refreshActiveContent/showOverlay
++	 * 重建 DOM 前会调 closeOpenMenu（→ hideContextView）并清空此状态，避免
++	 * "旧的收了、新的没弹"；折叠分组下拉的 onHide 还负责把借出的 .ribbon-items
++	 * 节点还回原分组。
 +	 */
 +	private openMenuAnchor: HTMLElement | undefined;
 +	private openMenuId: string | undefined;
@@ -1856,8 +1897,8 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +		return firstFocusableButton;
 +	}
 +
-+	private renderContributionGroupDropdown(parent: HTMLElement, tab: IRegisteredRibbonTab, contribution: IRibbonGroupContribution, store: DisposableStore): void {
-+		const button = append(parent, $<HTMLButtonElement>('button.ribbon-group-dropdown'));
++	private renderContributionGroupDropdown(group: HTMLElement, tab: IRegisteredRibbonTab, contribution: IRibbonGroupContribution, store: DisposableStore): void {
++		const button = append(group, $<HTMLButtonElement>('button.ribbon-group-dropdown'));
 +		button.type = 'button';
 +		button.setAttribute('aria-label', localize('ribbon.openGroup', "Open {0} menu", contribution.title));
 +		button.dataset.menuId = `group:${contribution.id}`;
@@ -1866,12 +1907,19 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +		append(button, $('span.ribbon-group-dropdown-label')).textContent = contribution.title;
 +		append(button, $('.ribbon-group-dropdown-chevron.codicon.codicon-chevron-down'));
 +		store.add(addDisposableListener(button, EventType.CLICK, () => {
-+			this.showContributionMenu(button, tab, { items: contribution.items, layout: contribution.menu?.layout });
++			/*
++			 * 折叠分组下拉直接复用该分组在 ribbon 主区域里已经渲染好的
++			 * .ribbon-items 节点（folded 时仅 display:none，DOM 完整保留），
++			 * 把它借到弹层里展示，关闭时还回原位。这样按钮形态、事件、命
++			 * 令执行、when/enablement、responsive 缩放状态都完全一致，弹出
++			 * 的就是"该分组未折叠时的原样内容"。
++			 */
++			this.showFoldedGroupDropdown(button, group, contribution.title);
 +		}));
 +	}
 +
-+	private renderGroupDropdown(parent: HTMLElement, tab: IBuiltinRibbonTab, title: string, actions: readonly IAction[], store: DisposableStore): void {
-+		const button = append(parent, $<HTMLButtonElement>('button.ribbon-group-dropdown'));
++	private renderGroupDropdown(group: HTMLElement, tab: IBuiltinRibbonTab, title: string, actions: readonly IAction[], store: DisposableStore): void {
++		const button = append(group, $<HTMLButtonElement>('button.ribbon-group-dropdown'));
 +		button.type = 'button';
 +		button.setAttribute('aria-label', localize('ribbon.openGroup', "Open {0} menu", title));
 +		this.renderBuiltinActionIcon(append(button, $('.ribbon-group-dropdown-icon')), tab, actions[0]);
@@ -1879,29 +1927,11 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +		append(button, $('.ribbon-group-dropdown-chevron.codicon.codicon-chevron-down'));
 +		store.add(addDisposableListener(button, EventType.CLICK, () => {
 +			/*
-+			 * 内置 tab 折叠下拉走 IContextMenuService（同样基于 ContextView 单
-+			 * 例）。点同一个按钮 → toggle；点其他下拉 → 先收旧再弹新，避免出
-+			 * 现"旧的收了、新的没弹"。
++			 * 内置 tab 折叠下拉与扩展 tab 统一：复用 .ribbon-items 原样 DOM，
++			 * 不再走 IContextMenuService 的原生右键菜单。toggle/切换语义由
++			 * showFoldedGroupDropdown 内部基于 openMenuAnchor 处理。
 +			 */
-+			if (this.openMenuKind === 'contextMenu' && this.openMenuAnchor === button) {
-+				this.closeOpenMenu();
-+				return;
-+			}
-+			this.closeOpenMenu();
-+			this.openMenuAnchor = button;
-+			this.openMenuId = `builtin:${tab.id}:${title}`;
-+			this.openMenuKind = 'contextMenu';
-+			this.contextMenuService.showContextMenu({
-+				getAnchor: () => button,
-+				getActions: () => [...actions],
-+				onHide: () => {
-+					if (this.openMenuAnchor === button) {
-+						this.openMenuAnchor = undefined;
-+						this.openMenuId = undefined;
-+						this.openMenuKind = undefined;
-+					}
-+				},
-+			});
++			this.showFoldedGroupDropdown(button, group, title);
 +		}));
 +	}
 +
@@ -2221,6 +2251,86 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +	}
 +
 +	/*
++	 * 折叠分组下拉：把分组在 ribbon 主区域里已经渲染好的 .ribbon-items 节点
++	 * "借"到 ContextView 弹层里展示，关闭时原样还回。
++	 *
++	 * 设计动机：折叠（.ribbon-group.folded）只是给 .ribbon-items 加
++	 * display:none，DOM 与所有按钮事件、命令绑定、when/enablement、responsive
++	 * 缩放状态（dataset.responsiveIndex / hidden）都完整保留。直接复用原节点
++	 * 比"按 contribution.items 重新渲染一份"更一致——用户看到的就是该分组未
++	 * 折叠时的原样内容（横向 6 行网格、full/half/third 三种尺寸、splitButton
++	 * 双层结构），无需任何额外声明。
++	 *
++	 * DOM 借还：在原 .ribbon-items 位置插入一个 <template> 占位（不可见、不参
++	 * 与布局），弹层关闭时通过 insertBefore 把 .ribbon-items 还回占位之前。
++	 * 即使 ribbon 在弹层打开期间被展开（setCollapsed(false) → render() 重建
++	 * content），onHide 也会先被触发（render 开头调 closeOpenMenu）把节点还回
++	 * 原分组、随后该分组 DOM 被 clearNode 销毁——这是正确行为，重建会生成新
++	 * 的 .ribbon-items。
++	 *
++	 * 外壳复用 .ribbon-panel-dropdown 的 --vscode-ribbon-dropdown-* 色板（PR
++	 * 已有的 Word 风格浮层外观），叠加 .ribbon-folded-dropdown 标记内部按原
++	 * ribbon 网格规则排版。容器显式设 --ribbon-item-full-height:74px，因为弹
++	 * 层不在 .ribbon-group 子树里、不会继承该变量，不设会导致网格高度塌缩。
++	 */
++	private showFoldedGroupDropdown(anchor: HTMLButtonElement, group: HTMLElement, title: string): void {
++		/*
++		 * toggle：点击的就是当前已打开下拉的 anchor → 收起返回。沿用
++		 * showContributionMenu 的判定模式（openMenuKind + openMenuAnchor）。
++		 */
++		if (this.openMenuKind === 'contextView' && this.openMenuAnchor === anchor) {
++			this.closeOpenMenu();
++			return;
++		}
++		const items = group.querySelector<HTMLElement>(':scope > .ribbon-items');
++		if (!items) {
++			return;
++		}
++		this.closeOpenMenu();
++		this.openMenuAnchor = anchor;
++		this.openMenuId = `folded:${title}`;
++		this.openMenuKind = 'contextView';
++		/*
++		 * 占位节点：用 <template> 而非 <div>，避免被 .ribbon-group 的子选择器
++		 * （如 :scope > .ribbon-items）误命中，也不参与 flex/grid 布局。记录
++		 * 在 items 节点上，onHide 时反向取回。
++		 */
++		const placeholder = group.ownerDocument.createElement('template');
++		placeholder.className = 'ribbon-items-placeholder';
++		group.insertBefore(placeholder, items);
++		let firstFocusableElement: HTMLElement | undefined;
++		this.contextViewService.showContextView({
++			getAnchor: () => anchor,
++			render: container => {
++				container.classList.add('ribbon-panel-dropdown', 'ribbon-folded-dropdown');
++				container.style.setProperty('--ribbon-item-full-height', '74px');
++				container.dataset.foldedGroup = title;
++				clearNode(container);
++				container.appendChild(items);
++				firstFocusableElement = items.querySelector<HTMLElement>('button:not([disabled])') ?? undefined;
++				return { dispose: () => { /* 节点生命周期由 group 管理，不在此销毁 */ } };
++			},
++			focus: () => firstFocusableElement?.focus(),
++			onHide: () => {
++				/*
++				 * 还节点：只有 placeholder 仍在 group 里时才还（如果 group 已
++				 * 被 clearNode 销毁、placeholder.parentNode 为 null，节点就让
++				 * ContextView 容器随销毁一并清理）。
++				 */
++				if (placeholder.parentNode) {
++					placeholder.parentNode.insertBefore(items, placeholder);
++					placeholder.remove();
++				}
++				if (this.openMenuAnchor === anchor) {
++					this.openMenuAnchor = undefined;
++					this.openMenuId = undefined;
++					this.openMenuKind = undefined;
++				}
++			},
++		});
++	}
++
++	/*
 +	 * Word 风格面板下拉的统一实现。声明式 contributes.ribbon（layout:'panel'）
 +	 * 和运行时 IRibbonService.showPanelDropdown 都走这里。
 +	 *
@@ -2420,6 +2530,7 @@ index 0000000000000000000000000000000000000000..f2788ba5b5b88ba60d26283d5a8347a6
 +}
 +
 +registerSingleton(IRibbonService, RibbonPart, InstantiationType.Eager);
+
 diff --git a/src/vs/workbench/browser/parts/ribbon/ribbonService.ts b/src/vs/workbench/browser/parts/ribbon/ribbonService.ts
 new file mode 100644
 index 0000000000000000000000000000000000000000..4cc6d313846c96a3fb1f6a6b238da4c4ecda7a35
@@ -2532,7 +2643,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..ba5231949bd7f45e5c45a5963d828ef7ee68d137
 --- /dev/null
 +++ b/src/vs/workbench/test/browser/parts/ribbon/ribbonPart.test.ts
-@@ -0,0 +1,531 @@
+@@ -0,0 +1,587 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -2984,6 +3095,62 @@ index 0000000000000000000000000000000000000000..ba5231949bd7f45e5c45a5963d828ef7
 +		assert.strictEqual(right.hidden, true);
 +	});
 +
++	test('folded group dropdown reuses the original ribbon-items DOM', () => {
++		/*
++		 * 折叠分组下拉应直接复用该分组在 ribbon 主区域里已经渲染好的
++		 * .ribbon-items 节点（横向 6 行网格、full/half/third 三种尺寸），而不是
++		 * 走竖排菜单或原生右键菜单。这里用一个能 capture delegate 的
++		 * IContextViewService stub 模拟弹层容器（overlayElement），断言：
++		 * 1) 点击折叠下拉后 .ribbon-items 被挪到弹层容器里；
++		 * 2) 原分组位置留下 <template class="ribbon-items-placeholder"> 占位；
++		 * 3) 关闭后 .ribbon-items 还回原分组、占位移除。
++		 */
++		const actions = [
++			disposables.add(new Action('test.first', 'First')),
++			disposables.add(new Action('test.second', 'Second')),
++		];
++		let delegate: IContextViewDelegate | undefined;
++		let renderDisposable: IDisposable | undefined;
++		const overlayElement = mainWindow.document.createElement('div');
++		fixture.append(overlayElement);
++		const contextViewService = {
++			showContextView: (newDelegate: IContextViewDelegate) => {
++				delegate = newDelegate;
++				renderDisposable = newDelegate.render(overlayElement);
++				newDelegate.focus?.();
++				return { close: () => renderDisposable?.dispose() };
++			},
++			hideContextView: () => {
++				renderDisposable?.dispose();
++				delegate?.onHide?.();
++				delegate = undefined;
++			},
++		} as unknown as IContextViewService;
++		createPart(undefined, undefined, actions, contextViewService);
++
++		const viewport = fixture.querySelector<HTMLElement>('.ribbon-scroll-viewport')!;
++		const groups = fixture.querySelector<HTMLElement>('.ribbon-groups')!;
++		Object.defineProperty(viewport, 'clientWidth', { configurable: true, value: 160 });
++		Object.defineProperty(groups, 'scrollWidth', { configurable: true, get: () => 300 - groups.querySelectorAll('.ribbon-group.folded').length * 50 });
++		mainWindow.dispatchEvent(new mainWindow.Event('resize'));
++		assert.strictEqual(groups.querySelectorAll('.ribbon-group.folded').length, 1);
++
++		const group = groups.querySelector<HTMLElement>('.ribbon-group.folded')!;
++		const items = group.querySelector<HTMLElement>(':scope > .ribbon-items')!;
++		const originalItemCount = items.querySelectorAll('.ribbon-item').length;
++		const dropdownButton = group.querySelector<HTMLButtonElement>('.ribbon-group-dropdown')!;
++
++		dropdownButton.click();
++		assert.strictEqual(overlayElement.querySelector('.ribbon-folded-dropdown') instanceof mainWindow.HTMLElement, true, 'folded dropdown container should be rendered');
++		assert.strictEqual(overlayElement.contains(items), true, '.ribbon-items should be borrowed into the dropdown container');
++		assert.strictEqual(group.querySelector('template.ribbon-items-placeholder') instanceof mainWindow.HTMLTemplateElement, true, 'placeholder should remain in original group while dropdown is open');
++		assert.strictEqual(overlayElement.querySelectorAll('.ribbon-item').length, originalItemCount, 'borrowed items should keep the same button count');
++
++		(contextViewService as unknown as { hideContextView: () => void }).hideContextView();
++		assert.strictEqual(group.contains(items), true, '.ribbon-items should be returned to the original group after close');
++		assert.strictEqual(group.querySelector('template.ribbon-items-placeholder'), null, 'placeholder should be removed after close');
++	});
++
 +	test('closes every built-in collapsed overlay on activity bar mousedown before its click handler runs', () => {
 +		let delegate: IContextViewDelegate | undefined;
 +		let renderDisposable: IDisposable | undefined;
@@ -3064,6 +3231,7 @@ index 0000000000000000000000000000000000000000..ba5231949bd7f45e5c45a5963d828ef7
 +
 +	ensureNoDisposablesAreLeakedInTestSuite();
 +});
+
 diff --git a/src/vs/workbench/workbench.common.main.ts b/src/vs/workbench/workbench.common.main.ts
 index 532c20d1cf1db34b86c19eca277ac8782732dee6..372f93d7534714cec340b6d8c9d2931617851be4 100644
 --- a/src/vs/workbench/workbench.common.main.ts
