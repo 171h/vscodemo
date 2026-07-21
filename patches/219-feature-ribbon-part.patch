@@ -1313,7 +1313,7 @@ index 0000000000000000000000000000000000000000..485da00c6749ff0ddf70e7c768fdfa8a
 + *--------------------------------------------------------------------------------------------*/
 +
 +import './media/ribbonpart.css';
-+import { $, addDisposableListener, append, clearNode, EventType, getWindow, isAncestor } from '../../../../base/browser/dom.js';
++import { $, addDisposableListener, append, clearNode, EventType, getWindow, isAncestor, trackFocus } from '../../../../base/browser/dom.js';
 +import { asCSSUrl } from '../../../../base/browser/cssValue.js';
 +import { IAction, SubmenuAction } from '../../../../base/common/actions.js';
 +import { Codicon } from '../../../../base/common/codicons.js';
@@ -2326,7 +2326,22 @@ index 0000000000000000000000000000000000000000..485da00c6749ff0ddf70e7c768fdfa8a
 +				clearNode(container);
 +				container.appendChild(items);
 +				firstFocusableElement = items.querySelector<HTMLElement>('button:not([disabled])') ?? undefined;
-+				return { dispose: () => { /* 节点生命周期由 group 管理，不在此销毁 */ } };
++				/*
++				 * 失焦自动收起：与 vscode 自家 breadcrumbsControl 一致，用 trackFocus
++				 * 监听浮层焦点进出，焦点移出浮层（点击浮层外任意元素、Tab 切到别处、
++				 * 切换窗口、DevTools 抢焦点等）时调 closeOpenMenu()。上游 ContextView
++				 * 默认的"外部点击关闭"只在 BUBBLE_DOWN 的 click 事件 + isAncestor 判定
++				 * 下生效，但 contextView 的容器是 layoutService.activeContainer（整个
++				 * 工作台），几乎所有点击都被判定为"在容器内"，默认 hide 路径触发不了，
++				 * 故必须显式挂 focusTracker 兜底。
++				 *
++				 * trackFocus 返回值作为 render 的 IDisposable 返回，由 ContextView 在
++				 * hide 时一并 dispose，无需手动清理；focusTracker 本身不创建/销毁借出
++				 * 的 .ribbon-items 节点，节点生命周期仍由 onHide 的 DOM 借还逻辑管理。
++				 */
++				const focusTracker = trackFocus(container);
++				focusTracker.onDidBlur(() => this.closeOpenMenu());
++				return focusTracker;
 +			},
 +			focus: () => firstFocusableElement?.focus(),
 +			onHide: () => {
