@@ -259,7 +259,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..595d553faa13b35b251903437d26c19a5b2dc84b
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/media/ribbonpart.css
-@@ -0,0 +1,691 @@
+@@ -0,0 +1,711 @@
 +.monaco-workbench .part.ribbon {
 +	background: var(--vscode-editor-background);
 +	color: var(--vscode-foreground);
@@ -1326,7 +1326,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..485da00c6749ff0ddf70e7c768fdfa8ad2c64409
 --- /dev/null
 +++ b/src/vs/workbench/browser/parts/ribbon/ribbonPart.ts
-@@ -0,0 +1,1238 @@
+@@ -0,0 +1,1253 @@
 +/*---------------------------------------------------------------------------------------------
 + *  Copyright (c) Microsoft Corporation. All rights reserved.
 + *  Licensed under the MIT License. See License.txt in the project root for license information.
