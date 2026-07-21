@@ -591,9 +591,26 @@ index 0000000000000000000000000000000000000000..595d553faa13b35b251903437d26c19a
 +	overflow: hidden;
 +}
 +
++/*
++ * 主按钮 / 单体按钮内部布局与 .ribbon-item-vertical 完全等价：column flex +
++ * justify-content: flex-start（靠顶排列、底部留白）。原先 justify-content:center
++ * 会让 icon+footer 整体垂直居中，与 vertical 按钮的"靠顶"观感不一致。trigger
++ * 是 splitButton 下半部分独立按钮，自身内容（label+chevron）仍需水平+垂直居中。
++ */
 +.ribbon-dropdown-primary,
-+.ribbon-dropdown-trigger,
 +.ribbon-dropdown-single {
++	display: flex;
++	flex-direction: column;
++	justify-content: flex-start;
++	align-items: center;
++	flex: 0 0 auto;
++	min-height: 0;
++	width: 100%;
++	padding: 0 2px;
++	cursor: pointer;
++}
++
++.ribbon-dropdown-trigger {
 +	display: flex;
 +	align-items: center;
 +	justify-content: center;
@@ -602,13 +619,10 @@ index 0000000000000000000000000000000000000000..595d553faa13b35b251903437d26c19a
 +	cursor: pointer;
 +}
 +
-+.ribbon-dropdown-primary,
-+.ribbon-dropdown-single {
-+	flex: 0 0 auto;
-+	flex-direction: column;
-+	min-height: 0;
-+}
-+
++/*
++ * 图标尺寸与 .ribbon-item-vertical .ribbon-item-icon 完全一致（40px 固定盒），
++ * 保证两类按钮在同一 ribbon 面板里视觉大小相同。
++ */
 +.ribbon-dropdown-primary .ribbon-item-icon,
 +.ribbon-dropdown-single > .ribbon-item-icon {
 +	--ribbon-icon-size: 40px;
@@ -622,22 +636,28 @@ index 0000000000000000000000000000000000000000..595d553faa13b35b251903437d26c19a
 +	cursor: default;
 +}
 +
++/*
++ * footer（dropdown-single）/ trigger（splitButton）是 label + chevron 的容器。
++ * min-height 收紧到 18px，避免吃掉过多垂直空间把内容顶离顶部；align-items 与
++ * justify-content 让 label+chevron 在容器内紧凑居中，最终的"单行/双行"排列由
++ * 下面的 ribbon-label-single / ribbon-label-double 切换 flex-direction 决定。
++ */
 +.ribbon-dropdown-trigger,
 +.ribbon-dropdown-footer {
 +	display: flex;
 +	align-items: center;
 +	justify-content: center;
 +	gap: 3px;
-+	min-height: 22px;
++	min-height: 18px;
 +}
 +
 +/*
-+ * Chevron alignment depends on how many lines the label wraps to at the current
-+ * group width. Single-line labels stack the chevron below the label (column) so
-+ * every chevron sits on the same horizontal baseline near the button bottom;
-+ * double-line labels keep the chevron on the right (row) to avoid pushing it
-+ * past the ribbon panel when the second line eats the remaining vertical space.
-+ * The line-count class is added at render time by watchRibbonLabelLines().
++ * Chevron 对齐：依赖标题在当前分组宽度下折行数（由 watchRibbonLabelLines 在
++ * 运行时给容器打 ribbon-label-single / ribbon-label-double class）。
++ *   - 单行：flex-direction column，chevron 排到标题下方，让所有 chevron 在
++ *     按钮底部附近水平对齐到同一 baseline；
++ *   - 双行：flex-direction row + align-items flex-end，chevron 排到标题右侧
++ *     底部，避免被第二行 label 挤出面板。
 + */
 +.ribbon-dropdown-trigger.ribbon-label-single,
 +.ribbon-dropdown-footer.ribbon-label-single {
